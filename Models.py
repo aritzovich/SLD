@@ -57,10 +57,6 @@ class LinearClassifier:
 
         self.weights-= lr * d_weights
 
-        param= param + param(X,Y) - param(X,h)
-        param= param - param(X,h-Y)
-
-
 
     def getClassProbs(self, X):
         # Add bias term to features
