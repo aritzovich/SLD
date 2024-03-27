@@ -268,11 +268,11 @@ class LogReg:
             self.sy += aux * d_sy
             self.s2y += aux * d_s2y
 
-            aux*= 0.5
-            self.m -= aux * d_m
-            self.my -= aux * d_my
-            self.sy -= aux * d_sy
-            self.s2y -= aux * d_s2y
+            #aux*= 0.5
+            #self.m -= aux * d_m
+            #self.my -= aux * d_my
+            #self.sy -= aux * d_sy
+            #self.s2y -= aux * d_s2y
             self.statsToParams(self.m, self.my, self.sy, self.s2y)
             actloss= np.average(- np.log(self.getClassProbs(X)[np.arange(m), Y]))
             #print("       " + str(np.min(self.s2y))+": "+str(actloss))

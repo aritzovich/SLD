@@ -133,9 +133,7 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
     - GD + parametric initialization
     - ERD (implicit parametric initialization)
 
-    :param dataNames: data sets
     :param numIter: numero of iterations for the iterative algorithms
-    :param num_rep: number of repetitions of the experiment to account for the variability of the results
     :return:
     '''
 
@@ -302,5 +300,5 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
 
 if __name__ == '__main__':
     experiments_logisticRegression()
-    experiments_QDA()
-    experiments_NB()
+    #experiments_QDA()
+    #experiments_NB()
