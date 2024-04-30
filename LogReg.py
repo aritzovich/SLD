@@ -18,9 +18,9 @@ class LogReg:
         self.cardY= cardY
         self.canonical= canonical
 
-    def fit(self, X, Y):
+    def fit(self, X, Y, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
         self.m, self.my, self.sy, self.s2y= self.getStats(X,Y)
-        self.statsToParams(self.m, self.my, self.sy, self.s2y)
+        self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
 
     def exponent(self, X):
         '''
@@ -133,14 +133,21 @@ class LogReg:
 
 
 
-    def statsToParams(self, m, my, sy, s2y):
+    def statsToParams(self, m, my, sy, s2y, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
         '''
         Compute the parameters of the classifier given the input statistics (CondMoments)
         '''
 
         # Parameters for Gaussian nb under homocedasticity
-        self.py= my/m
-        self.mu_y= sy/np.repeat(my, self.n).reshape(sy.shape)
+        m_y_prior = np.ones(self.cardY) * ess / self.cardY
+        self.py= (my+ m_y_prior)/(m + ess)
+
+        if w_mean0==0:
+            self.mu_y= sy/np.repeat(my, self.n).reshape(sy.shape)
+        elif w_mean0>0:
+            prior_mean= np.ones((self.cardY, self.n))*mean0
+            self.mu_y = (sy +prior_mean* w_mean0) /(np.repeat(my, self.n).reshape(sy.shape)+ w_mean0)
+
 
         # varianza
         # self.v= np.sum(s2y,axis=0)/m - (np.sum(sy,axis=0)/m)**2
@@ -151,7 +158,13 @@ class LogReg:
 
         # max likel estimate: (sum_i x^2 - sum_y m_y mu_y^2)/m = sum_i x^2/m - sum_y p(y) mu_y^2
         # self.v= (np.sum(s2y,axis= 0) - np.sum(sy**2/np.tile(my[:,np.newaxis],(1,self.n)), axis= 0))/m
-        self.v=  np.sum(s2y,axis=0)/m - self.py.transpose().dot(self.mu_y**2)
+        if w_cov0==0:
+            self.v=  np.sum(s2y,axis=0)/m - self.py.transpose().dot(self.mu_y**2)
+        elif w_cov0>0:
+            var= (np.sum(s2y,axis= 0) - np.sum(sy**2/np.tile(my[:,np.newaxis],(1,self.n)), axis= 0))/m
+            prior_cov= np.ones(self.n)* cov0
+            self.v= (var * m + prior_cov* w_cov0)/(m + w_cov0)
+
         self.standardToNatural()
 
     def standardToNatural(self):
@@ -170,7 +183,7 @@ class LogReg:
             # independent from y in the log partition funcion are canceled in the softmax
             self.alpha_y = np.log(self.py) - np.sum(self.mu_y**2/(2 * self.v),axis=1)
 
-    def getStats(self,X,Y,esz= 0):
+    def getStats(self,X,Y):
         '''
         Return the statistics from the input training set
 
@@ -229,7 +242,7 @@ class LogReg:
             self.kappa -= lr * d_kappa
 
 
-    def riskDesc(self, X, Y, lr= 0.1, loss= np.inf, stc= True):
+    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
         '''
 
         :param X: Instances
@@ -241,25 +254,18 @@ class LogReg:
         m= X.shape[0]
 
         # one-hot encoding of Y
-        #oh = np.zeros((m, self.cardY))
-        #oh[np.arange(m), Y] = 1
         oh= np.eye(self.cardY)[Y]
-
-        if stc:
-            pY = self.getClassProbs(X)
-        else:
-            pY =  np.zeros((m, self.cardY))
-            pY[np.arange(m), self.predict(X)] = 1
-
+        pY = self.getClassProbs(X)
         dif = pY - oh
 
         # compute the change on the statistics
-        d_m, d_my, d_sy, d_s2y = self.getStats(X,dif, esz= 0)
+        d_m, d_my, d_sy, d_s2y = self.getStats(X,dif)
         self.m -= lr * d_m
         self.my -= lr * d_my
         self.sy -= lr * d_sy
         self.s2y -= lr * d_s2y
 
+        '''
         aux= lr
         while np.any(self.m<= 0) or np.any(self.my <=0) or np.any(self.s2y <= 0.1):
             self.getStats(X, dif, esz=0)
@@ -274,18 +280,21 @@ class LogReg:
             #self.sy -= aux * d_sy
             #self.s2y -= aux * d_s2y
             self.statsToParams(self.m, self.my, self.sy, self.s2y)
+            
             actloss= np.average(- np.log(self.getClassProbs(X)[np.arange(m), Y]))
             #print("       " + str(np.min(self.s2y))+": "+str(actloss))
             if actloss< loss:
                 return
+        '''
 
-        if np.any(self.m<= 0): raise ValueError("invalid m: "+str(self.m))
-        elif np.any(self.my <=0): raise ValueError("invalid my: "+str(self.my))
-        elif np.any(self.s2y <= 0): raise ValueError("invalid s2y: "+str(self.s2y))
+        #if np.any(self.m<= 0): raise ValueError("invalid m: "+str(self.m))
+        #elif np.any(self.my <=0): raise ValueError("invalid my: "+str(self.my))
+        #elif np.any(self.s2y <= 0): raise ValueError("invalid s2y: "+str(self.s2y))
 
 
         # update the parameters
-        self.statsToParams(self.m, self.my, self.sy, self.s2y)
+        self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
+
 
         aux= lr
         while np.any(self.py <= 0) or np.any(self.v <= 0):
@@ -298,9 +307,7 @@ class LogReg:
             self.my -= aux * d_my
             self.sy -= aux * d_sy
             self.s2y -= aux * d_s2y
-            self.statsToParams(self.m, self.my, self.sy, self.s2y)
+            self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
 
         if np.any(self.py <= 0): raise ValueError("invalid py: "+str(self.py))
-        elif np.any(self.v <= 0):
-
-            raise ValueError("invalid v: "+str(self.v))
+        elif np.any(self.v <= 0): raise ValueError("invalid v: "+str(self.v))

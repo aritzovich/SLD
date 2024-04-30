@@ -74,69 +74,90 @@ class LinearClassifier:
 
 
 class NaiveBayesDisc:
-    def __init__(self, cardY, n, ess= 0):
+    def __init__(self, cardY, n):
         self.cardY = cardY
         self.num_features = n
         self.class_counts = np.zeros(cardY)
         self.feature_counts = np.zeros((n, 2, cardY))  # Stores counts for each feature
         self.class_probs = np.zeros(cardY)
         self.cond_probs = np.zeros((n, 2, cardY))
-        self.ess= ess
-
-
-    def initialize(self, ess=100):
-
-        self.ess= ess
-        self.feature_counts = np.ones((self.num_features, 2, self.cardY))* ess/(2*self.cardY)  # Stores counts for each feature
-        self.class_counts= np.ones(self.cardY)* ess/self.cardY
-        self.statsToParams()
-
 
     def getStats(self, X, Y):
-
         m,n= X.shape
-        class_counts = self.ess * np.ones(self.cardY)/self.cardY
-        feature_counts = self.ess * np.ones((n, 2, self.cardY))/(self.cardY*2)
+        class_counts = np.zeros(self.cardY)
+        feature_counts = np.zeros((n, 2, self.cardY))
+
+        # Convert X to a boolean mask
+        X_mask = X.astype(bool)
+
         if Y.ndim == 1:
             # Compute class counts
-            for c in range(self.cardY):
-                class_counts[c] += np.sum(Y == c)
+            class_counts += np.bincount(Y, minlength=self.cardY)
 
             # Compute feature counts
-            for i in range(len(Y)):
-                c = Y[i]
-                for j in range(self.num_features):
-                    try:
-                        feature_counts[j, X[i, j], c] += 1
-                    except:
-                        feature_counts[j, X[i, j], c] += 1
+            for j in range(self.num_features):
+                feature_counts[j, 0, :] += np.bincount(Y[~X_mask[:,j]], minlength=self.cardY)
+                feature_counts[j, 1, :] += np.bincount(Y[X_mask[:,j]], minlength=self.cardY)
+
         else:
             # Compute class counts
             class_counts += np.sum(Y,axis= 0)
 
-            # Compute feature counts
-            for i in range(m):
-                for c in range(self.cardY):
-                    for j in range(self.num_features):
-                        feature_counts[j, X[i, j], c] += Y[i,c]
+            # Use broadcasting to update feature_counts efficiently
+            for j in range(self.num_features):
+                feature_counts[j, 0, :] += np.sum(Y[~X_mask[:,j], :], axis=0)
+                feature_counts[j, 1, :] += np.sum(Y[X_mask[:,j], :], axis=0)
 
         return class_counts, feature_counts
 
-    def statsToParams(self):
+    def statsToParams(self, ess= 0):
+        '''
+        Parameter mapping: from statistics to parameters.
+
+        Args:
+            ess: when zero corresponds to maximum likelihood parameters. When positive corresponds to maximum a
+            posteriori parameters with a uniform dirichlet prior with ess equivalent sample size
+        Returns:
+
+        '''
+        if ess>0:
+            feature_counts_prior = np.ones((self.num_features, 2, self.cardY)) * ess / (2 * self.cardY)  # Stores counts for each feature
+            class_counts_prior = np.ones(self.cardY) * ess / self.cardY
+
         # Compute class probabilities
-        self.class_probs = self.class_counts / np.sum(self.class_counts)
+        if ess==0:
+            self.class_probs = self.class_counts / np.sum(self.class_counts)
+        elif ess>0:
+            self.class_probs = (self.class_counts + class_counts_prior) / np.sum(self.class_counts + class_counts_prior)
 
         # Compute conditional probabilities
         for j in range(self.num_features):
             for f in range(2):
                 for c in range(self.cardY):
-                    self.cond_probs[j, f, c] = self.feature_counts[j, f, c] / self.class_counts[c]
+                    if ess== 0:
+                        self.cond_probs[j, f, c] = self.feature_counts[j, f, c] / self.class_counts[c]
+                    elif ess>0:
+                        self.cond_probs[j, f, c] = (self.feature_counts[j, f, c] + feature_counts_prior[j, f, c]) / (
+                                    self.class_counts[c] + class_counts_prior[c])
 
-    def fit(self, X_train, y_train):
+    def fit(self, X_train, y_train, ess= 0):
         self.class_counts,self.feature_counts= self.getStats(X_train, y_train)
-        self.statsToParams()
+        self.statsToParams(ess)
 
-    def riskDesc(self, X, Y, lr= 0.1, correct_negative_stats= False):
+    def riskDesc(self, X, Y, lr= 0.1, ess= 0, correct_negative_stats= False):
+        '''
+        Risk descent iterative learning algorithm.
+
+        Args:
+            X: Training unlabeled instances
+            Y: Training class labels
+            lr: learning rate
+            correct_negative_stats: project negative statistics by using the simplex projection of the associated
+            probabilities
+
+        Returns:
+
+        '''
 
         oh = np.eye(self.cardY)[Y]
         pY = self.getClassProbs(X)
@@ -165,19 +186,16 @@ class NaiveBayesDisc:
                             sum= np.sum(self.feature_counts[j,:,y])
                             self.feature_counts[j,:,y]= project_onto_simplex(self.feature_counts[j,:,y]/sum)*sum
 
-
-        if np.any(self.class_counts < 0):
-            raise ValueError("negative class_counts: " + str(np.sort(self.class_counts.flatten())[:10]))
-        if np.any(self.feature_counts < 0):
-            raise ValueError("negative feature_counts: " + str(np.sort(self.feature_counts.flatten())[:10]))
-
-        # update the parameters
-        self.statsToParams()
+        # update the parameters from the parameters
+        self.statsToParams(ess)
 
 
     def gradDesc(self, X, Y, lr= 0.1):
         '''
-        Gradient descent for the LogosticReg classifiers
+        Gradient descent for the discrete naive Bayes classifiers. The gradient is computed for the parameters
+        (probabilities) in their logarithm form to avoid negative parameters. Once the gradient descent is computed
+        the parameters are projected into the simplex to guarantee that are probabilities
+
         :param X: unlabeled instances
         :param Y: labels
         :return:
@@ -242,7 +260,7 @@ class QDA:
         self.mean_y = None
         self.cov_y = None
 
-    def getStats(self, X, Y, ):
+    def getStats(self, X, Y):
 
         m_y = np.zeros(self.cardY)
         s1_y = np.zeros((self.cardY, self.n))
@@ -253,9 +271,9 @@ class QDA:
             for c in range(self.cardY):
                 m_y[c] = np.sum(Y == c)
 
-            # Compute con moments1
+            # Compute cond moments1
             for c in np.arange(self.cardY):
-                X_c= X[Y==c,:]
+                X_c= X[Y==c, :]
                 s1_y[c,:]=np.sum(X_c, axis= 0)
                 s2_y[c, :]= X_c.transpose() @ X_c
 
@@ -264,23 +282,69 @@ class QDA:
             m_y = np.sum(Y, axis=0)
 
             for c in np.arange(self.cardY):
-                s1_y[c,:]= X.transpose() @ Y[:,c]
+                s1_y[c, :]= X.transpose() @ Y[:,c]
                 s2_y[c, :]= (X.transpose() * Y[:,c]) @ X
 
         return m_y, s1_y, s2_y
 
-    def statsToParams(self):
+    def statsToParams(self, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
+        '''
 
-        self.p_y= self.m_y/np.sum(self.m_y)
+        Args:
+            ess: equivalent sample size for the Dirichlet prior of the class distribution
+            mean0: Prior over the mean.
+            w_mean0: Weight for the prior over the mean
+            cov0: Prior for the variance.
+            nu: Degrees of freedom for Wishart distribution
+            scale: Scale matrix for Wishart distribution
+
+        Returns:
+
+        '''
+
+        #Marginal probabilitiy class distribution
+        m_y_prior= np.ones(self.cardY)*ess/self.cardY
+        self.p_y= (self.m_y + m_y_prior)/np.sum(self.m_y+ m_y_prior)
+
+        if w_mean0>0:
+            # Prior parameters
+            prior_mean = np.ones(self.n)* mean0 # Prior mean matrix
+            prior_cov = np.eye(self.n)*cov0  # Prior covariance matrix
+
+
         self.mean_y= np.zeros((self.cardY,self.n))
         self.cov_y= np.zeros((self.cardY,self.n,self.n))
-        for c in np.arange(self.cardY):
-            self.mean_y[c,:]= self.s1_y[c,:]/self.m_y[c]
-            self.cov_y[c,:,:]= self.s2_y[c,:,:]/self.m_y[c] - np.outer(self.mean_y[c,:],self.mean_y[c,:])
+        if w_mean0== 0:
+            for c in np.arange(self.cardY):
+                self.mean_y[c,:]= self.s1_y[c,:]/self.m_y[c]
+                self.cov_y[c,:,:]= self.s2_y[c,:,:]/self.m_y[c] - np.outer(self.mean_y[c,:],self.mean_y[c,:])
+        elif w_mean0>0:
+            for c in np.arange(self.cardY):
+                mu= self.s1_y[c,:]/self.m_y[c]
+                cov= self.s2_y[c,:,:]/self.m_y[c] - np.outer(self.mean_y[c,:],self.mean_y[c,:])
 
-    def fit(self,X,Y):
+                self.mean_y[c,:]= (mu * self.m_y[c] + w_mean0 * prior_mean)/(self.m_y[c] + w_mean0)
+                # See https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Bayesian_inference
+                # Taking the modes for p(mu| Sigma,X) and for p(Sigma|X) using the conjugate priors (normal for the mean
+                # and inverse Wishart for the covariance)
+                #self.cov_y[c, :, :] = (prior_cov + self.m_y[c] * cov + (
+                #            self.m_y[c] * w_cov0 / (self.m_y[c] + w_cov0)) * (
+                #            mu - prior_mean) @ (mu - prior_mean).transpose()) / (self.m_y[c] + w_cov0 - self.n - 1)
+
+                # Looking at "Introduction to Bayesian Data Imputation" (Holt,Nguyen) Eq.5 and the next equation regarding the
+                # posterior mean there are errors in Wikipedia.
+
+                # The posterior distribution for the covariance given the data is asumming p(Sigma) is an inverse
+                # Wishart with parameters S_0^-1, nu_0 is a Wishart with parameters [S_0 + S]^-1, nu_o + n where
+                # S is n*cov and n is the number of data points.
+                # According to (Holt,Nguyen) E[Sigma|X,mu)= (S_0 + S)/(nu_0-dim-1 + n)
+                # After a reparametrization, geting one iteration of Gibbs sampling starting at mu and setting
+                # prior_cov= S_0/w_cov with w_cov= nu_0 - dim -1 we get the more intuidive
+                self.cov_y[c, :, :]= (self.m_y[c]* cov + w_cov0 * prior_cov)/(self.m_y[c] + w_cov0)
+
+    def fit(self,X,Y, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
         self.m_y, self.s1_y, self.s2_y= self.getStats(X,Y)
-        self.statsToParams()
+        self.statsToParams(ess= ess, mean0= mean0, w_mean0=w_mean0, cov0= cov0, w_cov0= cov0)
 
     def getClassProbs(self, X):
         m= X.shape[0]
@@ -292,7 +356,7 @@ class QDA:
         pY/= np.sum(pY, axis= 1, keepdims= True)
         return pY
 
-    def riskDesc(self, X, Y, lr= 0.1):
+    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
 
         oh = np.eye(self.cardY)[Y]
         pY = self.getClassProbs(X)
@@ -306,7 +370,7 @@ class QDA:
         self.s2_y -= lr * d_s2_y
 
         # update the parameters
-        self.statsToParams()
+        self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)
 
     def predict(self, X):
         pY= self.getClassProbs(X)
