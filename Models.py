@@ -14,15 +14,27 @@ def project_onto_simplex(v):
     - Projected vector onto the simplex
     """
 
-    n = len(v)  # Number of elements in the input vector
-    u = np.sort(v)[::-1]  # Sort the elements of v in descending order
-    cssv = np.cumsum(u) - 1  # Compute the Cumulative Sum of Sorted Values (CSSV)
-    ind = np.arange(1, n + 1)  # Indices from 1 to n
-    cond = u - cssv / ind > 0  # Check the condition for each element
-    rho = ind[cond][-1]  # Find the index where the condition is satisfied
-    theta = cssv[cond][-1] / float(rho)  # Compute theta
-    w = np.maximum(v - theta, 0)  # Project v onto the simplex
-    return w
+    try:
+        n = len(v)  # Number of elements in the input vector
+        u = np.sort(v)[::-1]  # Sort the elements of v in descending order
+        cssv = np.cumsum(u) - 1  # Compute the Cumulative Sum of Sorted Values (CSSV)
+        ind = np.arange(1, n + 1)  # Indices from 1 to n
+        cond = u - cssv / ind > 0  # Check the condition for each element
+        rho = ind[cond][-1]  # Find the index where the condition is satisfied
+        theta = cssv[cond][-1] / float(rho)  # Compute theta
+        w = np.maximum(v - theta, 0)  # Project v onto the simplex
+        return w
+    except Exception as e:
+        n = len(v)  # Number of elements in the input vector
+        u = np.sort(v)[::-1]  # Sort the elements of v in descending order
+        cssv = np.cumsum(u) - 1  # Compute the Cumulative Sum of Sorted Values (CSSV)
+        ind = np.arange(1, n + 1)  # Indices from 1 to n
+        cond = u - cssv / ind > 0  # Check the condition for each element
+        rho = ind[cond][-1]  # Find the index where the condition is satisfied
+        theta = cssv[cond][-1] / float(rho)  # Compute theta
+        w = np.maximum(v - theta, 0)  # Project v onto the simplex
+        return w
+
 
 
 class LinearClassifier:
@@ -74,21 +86,24 @@ class LinearClassifier:
 
 
 class NaiveBayesDisc:
-    def __init__(self, cardY, n):
+    def __init__(self, cardY, card, n):
         self.cardY = cardY
         self.num_features = n
+        self.card= card
         self.class_counts = np.zeros(cardY)
-        self.feature_counts = np.zeros((n, 2, cardY))  # Stores counts for each feature
+        #self.feature_counts = np.zeros((n, 2, cardY))
+        self.feature_counts = np.zeros((n, card, cardY))
         self.class_probs = np.zeros(cardY)
-        self.cond_probs = np.zeros((n, 2, cardY))
+        #self.cond_probs = np.zeros((n, 2, cardY))
+        self.cond_probs = np.zeros((n, card, cardY))
 
     def getStats(self, X, Y):
         m,n= X.shape
         class_counts = np.zeros(self.cardY)
-        feature_counts = np.zeros((n, 2, self.cardY))
+        feature_counts = np.zeros((n, self.card, self.cardY))
 
         # Convert X to a boolean mask
-        X_mask = X.astype(bool)
+        # X_mask = X.astype(bool)
 
         if Y.ndim == 1:
             # Compute class counts
@@ -96,8 +111,11 @@ class NaiveBayesDisc:
 
             # Compute feature counts
             for j in range(self.num_features):
-                feature_counts[j, 0, :] += np.bincount(Y[~X_mask[:,j]], minlength=self.cardY)
-                feature_counts[j, 1, :] += np.bincount(Y[X_mask[:,j]], minlength=self.cardY)
+                feature_counts[j, :, :]= np.bincount(X[:,j]*self.cardY+ Y, minlength= self.card* self.cardY ).reshape((self.card,self.cardY))
+
+                #feature_counts[j, :, :]= np.bincount(X[:,j]*self.cardY+ Y, minlength= 2* self.cardY ).reshape((2,self.cardY))
+                #feature_counts[j, 0, :] += np.bincount(Y[~X_mask[:,j]], minlength=self.cardY)
+                #feature_counts[j, 1, :] += np.bincount(Y[X_mask[:,j]], minlength=self.cardY)
 
         else:
             # Compute class counts
@@ -105,8 +123,13 @@ class NaiveBayesDisc:
 
             # Use broadcasting to update feature_counts efficiently
             for j in range(self.num_features):
-                feature_counts[j, 0, :] += np.sum(Y[~X_mask[:,j], :], axis=0)
-                feature_counts[j, 1, :] += np.sum(Y[X_mask[:,j], :], axis=0)
+                for x in range(self.card):
+                    feature_counts[j, x, :] = np.sum(Y[X[:, j]==x,:], axis= 0)
+
+                #feature_counts[j, 1, :]= X[:,j].dot(Y)
+                #feature_counts[j, 0, :]= (1-X[:,j]).dot(Y)
+                #feature_counts[j, 0, :] += np.sum(Y[~X_mask[:,j], :], axis=0)
+                #feature_counts[j, 1, :] += np.sum(Y[X_mask[:,j], :], axis=0)
 
         return class_counts, feature_counts
 
@@ -121,7 +144,8 @@ class NaiveBayesDisc:
 
         '''
         if ess>0:
-            feature_counts_prior = np.ones((self.num_features, 2, self.cardY)) * ess / (2 * self.cardY)  # Stores counts for each feature
+            #feature_counts_prior = np.ones((self.num_features, 2, self.cardY)) * ess / (2 * self.cardY)
+            feature_counts_prior = np.ones((self.num_features, self.card, self.cardY)) * ess / (self.card * self.cardY)
             class_counts_prior = np.ones(self.cardY) * ess / self.cardY
 
         # Compute class probabilities
@@ -132,7 +156,8 @@ class NaiveBayesDisc:
 
         # Compute conditional probabilities
         for j in range(self.num_features):
-            for f in range(2):
+            #for f in range(2):
+            for f in range(self.card):
                 for c in range(self.cardY):
                     if ess== 0:
                         self.cond_probs[j, f, c] = self.feature_counts[j, f, c] / self.class_counts[c]
@@ -218,14 +243,14 @@ class NaiveBayesDisc:
         self.class_probs= project_onto_simplex(self.class_probs)
 
 
-        d_beta_y= np.zeros(2)
+        d_beta_y= np.zeros(self.card)
         for j in np.arange(self.num_features):
             for c in np.arange(self.cardY):
                 # For each probability table: feature k and class c
-                for k in np.arange(2):
-                    d_beta_y[k]= np.sum(dif[X[:,j]== k,c])/m
+                for x in np.arange(self.card):
+                    d_beta_y[x]= np.sum(dif[X[:,j]== x,c])/m
 
-                beta_y= np.log(self.cond_probs[j,:,c])
+                beta_y = np.log(self.cond_probs[j,:,c])
                 beta_y -= lr * d_beta_y
                 # Normalize each probability table by projecting into the simplex
                 self.cond_probs[j, :, c]= project_onto_simplex(np.exp(beta_y))

@@ -26,7 +26,7 @@ def scaling_pY(pY):
 
     return pY
 
-def preprocess_data(X,Y,min_cond_var= 10**-5, discretize= False):
+def preprocess_data(X,Y,min_cond_var= 10**-5, n_bins= 0):
 
     m,n= X.shape
 
@@ -51,7 +51,7 @@ def preprocess_data(X,Y,min_cond_var= 10**-5, discretize= False):
     for i, y in enumerate(domY):
         Y_proc[Y == y] = i
 
-    if not discretize:
+    if n_bins==0:
         cardY= len(np.unique(Y))
         # remove variables with low variance given any class label
         del_vars= np.zeros(n,dtype=bool)
@@ -69,10 +69,10 @@ def preprocess_data(X,Y,min_cond_var= 10**-5, discretize= False):
 
         return X_normalized, Y_proc
     else:
-        if discretize:
+        if n_bins>0:
             # Initialize KBinsDiscretizer with strategy='quantile' for equal frequency binning
             # n_bins specifies the number of bins
-            discretizer = KBinsDiscretizer(n_bins=2, encode='ordinal', strategy='kmeans')
+            discretizer = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy='kmeans')
 
             # Fit and transform the data
             X_disc = discretizer.fit_transform(X).astype(int)

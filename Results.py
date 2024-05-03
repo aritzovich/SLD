@@ -194,7 +194,7 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
     df= pd.read_csv(name)
     df= df.sort_values(by=["data","iter"])
 
-    for type in ["ML","MS"]:
+    for type in ["ML","MAP"]:
         list_to_print= list()
 
         df_RD= df[(df["alg"]=="RD") & (df["type"]== type)]
@@ -211,7 +211,7 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
                 row.append(group[(group["iter"] == 1) & (group["loss"] == score_to_print)]['val'].values[0])
                 for iter in range(2,np.max(group["iter"])+1):
                     if (group[(group["iter"] == iter-1) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]
-                            - group[(group["iter"] == iter) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]< threshold):
+                            - group[(group["iter"] == iter) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]<= threshold):
                         row.append(group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0])
                         row.append(iter-1)
                         score_RD= group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0]
@@ -247,5 +247,5 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
 if __name__ == '__main__':
     createTable_datasets()
 #    createTable_QDA(name="./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1")
-    createTable_NB(name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1")
+#    createTable_NB(name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1")
     createTable_LogReg(name="./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1")

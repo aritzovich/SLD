@@ -139,8 +139,11 @@ class LogReg:
         '''
 
         # Parameters for Gaussian nb under homocedasticity
-        m_y_prior = np.ones(self.cardY) * ess / self.cardY
-        self.py= (my+ m_y_prior)/(m + ess)
+        if ess== 0:
+            self.py = my / m
+        else:
+            m_y_prior = np.ones(self.cardY) * ess / self.cardY
+            self.py= (my+ m_y_prior)/(m + ess)
 
         if w_mean0==0:
             self.mu_y= sy/np.repeat(my, self.n).reshape(sy.shape)
@@ -159,6 +162,7 @@ class LogReg:
         # max likel estimate: (sum_i x^2 - sum_y m_y mu_y^2)/m = sum_i x^2/m - sum_y p(y) mu_y^2
         # self.v= (np.sum(s2y,axis= 0) - np.sum(sy**2/np.tile(my[:,np.newaxis],(1,self.n)), axis= 0))/m
         if w_cov0==0:
+            # s2/m - sum_y m_y/m * mu_y^2
             self.v=  np.sum(s2y,axis=0)/m - self.py.transpose().dot(self.mu_y**2)
         elif w_cov0>0:
             var= (np.sum(s2y,axis= 0) - np.sum(sy**2/np.tile(my[:,np.newaxis],(1,self.n)), axis= 0))/m
@@ -242,7 +246,7 @@ class LogReg:
             self.kappa -= lr * d_kappa
 
 
-    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
+    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0, correction= False):
         '''
 
         :param X: Instances
@@ -265,49 +269,25 @@ class LogReg:
         self.sy -= lr * d_sy
         self.s2y -= lr * d_s2y
 
-        '''
-        aux= lr
-        while np.any(self.m<= 0) or np.any(self.my <=0) or np.any(self.s2y <= 0.1):
-            self.getStats(X, dif, esz=0)
-            self.m += aux * d_m
-            self.my += aux * d_my
-            self.sy += aux * d_sy
-            self.s2y += aux * d_s2y
+        if correction:
+            aux= lr
+            while np.any(self.my <= 0.001) or np.any(self.s2y <= 0.001):
+                self.m += aux * d_m
+                self.my += aux * d_my
+                self.sy += aux * d_sy
+                self.s2y += aux * d_s2y
+                aux*= 0.1
+                self.m -= aux * d_m
+                self.my -= aux * d_my
+                self.sy -= aux * d_sy
+                self.s2y -= aux * d_s2y
+        elif np.any(self.my <= 0.000) or np.any(self.s2y <= 0.000):
+            self.m += lr * d_m
+            self.my += lr * d_my
+            self.sy += lr * d_sy
+            self.s2y += lr * d_s2y
 
-            #aux*= 0.5
-            #self.m -= aux * d_m
-            #self.my -= aux * d_my
-            #self.sy -= aux * d_sy
-            #self.s2y -= aux * d_s2y
-            self.statsToParams(self.m, self.my, self.sy, self.s2y)
-            
-            actloss= np.average(- np.log(self.getClassProbs(X)[np.arange(m), Y]))
-            #print("       " + str(np.min(self.s2y))+": "+str(actloss))
-            if actloss< loss:
-                return
-        '''
-
-        #if np.any(self.m<= 0): raise ValueError("invalid m: "+str(self.m))
-        #elif np.any(self.my <=0): raise ValueError("invalid my: "+str(self.my))
-        #elif np.any(self.s2y <= 0): raise ValueError("invalid s2y: "+str(self.s2y))
-
-
-        # update the parameters
         self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
-
-
-        aux= lr
-        while np.any(self.py <= 0) or np.any(self.v <= 0):
-            self.m += aux * d_m
-            self.my += aux * d_my
-            self.sy += aux * d_sy
-            self.s2y += aux * d_s2y
-            aux*= 0.5
-            self.m -= aux * d_m
-            self.my -= aux * d_my
-            self.sy -= aux * d_sy
-            self.s2y -= aux * d_s2y
-            self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
 
         if np.any(self.py <= 0): raise ValueError("invalid py: "+str(self.py))
         elif np.any(self.v <= 0): raise ValueError("invalid v: "+str(self.v))
