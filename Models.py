@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.stats import multivariate_normal
-
+from scipy.special import softmax
 
 
 def project_onto_simplex(v):
@@ -169,7 +169,7 @@ class NaiveBayesDisc:
         self.class_counts,self.feature_counts= self.getStats(X_train, y_train)
         self.statsToParams(ess)
 
-    def riskDesc(self, X, Y, lr= 0.1, ess= 0, correct_negative_stats= False):
+    def riskDesc(self, X, Y, lr= 0.1, ess= 0, correct_forbidden_stats= True):
         '''
         Risk descent iterative learning algorithm.
 
@@ -177,8 +177,9 @@ class NaiveBayesDisc:
             X: Training unlabeled instances
             Y: Training class labels
             lr: learning rate
-            correct_negative_stats: project negative statistics by using the simplex projection of the associated
-            probabilities
+            correct_negative_stats:
+                1) project negative statistics by using the simplex projection of the associated probabilities
+                2) do not update the table with negative statistics
 
         Returns:
 
@@ -195,21 +196,16 @@ class NaiveBayesDisc:
         self.class_counts -= lr * d_class_counts
         self.feature_counts -= lr * d_feature_counts
 
-        if correct_negative_stats:
+        if correct_forbidden_stats:
             if np.any(self.class_counts < 0):
-                print("correction in class counts")
-                # Project to the positive part maintaining the sum
-                sum = np.sum(self.class_counts)
-                self.class_counts = project_onto_simplex(self.class_counts / sum) * sum
+                self.class_counts -= lr * d_class_counts
 
-            if np.any(self.feature_counts < 0):
-                print("correction in feature counts")
-                for j in range(self.num_features):
-                    for y in range(self.cardY):
-                        if np.any(self.feature_counts[j,:,y]<0):
-                            # Project to the positive part maintaining the sum
-                            sum= np.sum(self.feature_counts[j,:,y])
-                            self.feature_counts[j,:,y]= project_onto_simplex(self.feature_counts[j,:,y]/sum)*sum
+            first, second= np.where((self.feature_counts < 0).any(axis=(1)))
+            indices= list(zip(first, second))
+            for j,y in indices:
+                self.feature_counts[j, :, y] += lr * d_feature_counts[j, :, y]
+
+
 
         # update the parameters from the parameters
         self.statsToParams(ess)
@@ -257,7 +253,7 @@ class NaiveBayesDisc:
 
 
 
-    def getClassProbs(self, X):
+    def getClassProbs_(self, X):
         m,n= X.shape
         pY= np.zeros((m, self.cardY))
         for y in np.arange(self.cardY):
@@ -267,6 +263,17 @@ class NaiveBayesDisc:
 
         row_sums = np.sum(pY, axis=1, keepdims=True)
         return pY/row_sums
+
+    def getClassProbs(self, X):
+        m,n= X.shape
+        log_pY= np.zeros((m, self.cardY))
+        for y in np.arange(self.cardY):
+            log_pY[:, y]= np.log(self.class_probs[y])
+            for j in np.arange(n):
+                log_pY[:, y] += np.log(self.cond_probs[j, X[:,j], y])
+        return softmax(log_pY, axis= 1)
+
+
 
     def predict(self, X):
         pY= self.getClassProbs(X)
@@ -381,7 +388,7 @@ class QDA:
         pY/= np.sum(pY, axis= 1, keepdims= True)
         return pY
 
-    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
+    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0, correct_forbidden_stats= False):
 
         oh = np.eye(self.cardY)[Y]
         pY = self.getClassProbs(X)
@@ -393,6 +400,18 @@ class QDA:
         self.m_y -= lr * d_m_y
         self.s1_y -= lr * d_s1_y
         self.s2_y -= lr * d_s2_y
+
+        if correct_forbidden_stats:
+            if np.any(self.m_y < 0):
+                self.m_y -= lr * d_m_y
+
+            #deberia hacerse para todos los valores de la clase o para ninguno: concatenar las features y despues dorregir todos los condicionadaos de el conjunto de features
+            for y in range(self.cardY):
+                feats= np.where((np.diag(self.s2_y[y,:,:]- self.s1_y[y,:])**2/self.m_y[y])<= 0)[0]
+                if len(feats)>0:
+                    None
+                self.s2_y[y,:,:][np.ix_(feats,feats)]+= lr * d_s2_y[y,:,:][np.ix_(feats,feats)]
+                self.s1_y[y][feats]+= lr * d_s1_y[y][feats]
 
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)

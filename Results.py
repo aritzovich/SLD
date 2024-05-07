@@ -247,5 +247,5 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
 if __name__ == '__main__':
     createTable_datasets()
 #    createTable_QDA(name="./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1")
-#    createTable_NB(name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1")
-    createTable_LogReg(name="./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1")
+#    createTable_NB(name="./Results/results_exper_NB_lr0.1.csv.2", score_to_print="0-1")
+    createTable_LogReg(name="./Results/results_exper_LR_lr0.1.csv.2", score_to_print="0-1")

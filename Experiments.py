@@ -19,11 +19,9 @@ from Utils import preprocess_data
 import Utils as utl
 import os
 
-old_dataNames = ['adult', 'ecoli', 'german_numer', 'haberman', 'heart', 'indian_liver', 'iris',
-                 'letterrecog', 'liver_disorder', 'mammographic', 'optdigits' , 'redwine', 'satellite', 'sonar',
-                 'svmguide3', 'vehicle']
-
-dataNames= old_dataNames+ ["blood_transfusion", "climate_model", "diabetes", "ionosphere", 'magic', 'pulsar', 'QSAR', 'splice']#, 'glass' falla log reg]#, 'thyroid']
+dataNames = ['glass', 'optdigits' , 'splice',  'QSAR', 'letterrecog', 'vehicle', 'satellite', 'sonar','adult','redwine',
+             'svmguide3', 'ecoli', 'german_numer', 'haberman', 'heart', 'indian_liver', 'iris',
+            'liver_disorder', 'mammographic',"blood_transfusion", "climate_model", "diabetes", "ionosphere", 'magic', 'pulsar']#, 'glass' falla log reg]#, 'thyroid']
 
 def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0):
     '''
@@ -52,6 +50,8 @@ def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0):
         X, Y= preprocess_data(X, Y)
         cardY = np.unique(Y).shape[0]
         m, n = X.shape
+
+        randY= np.random.choice(cardY,m)
 
         print(dataName)
         print("########")
@@ -82,16 +82,16 @@ def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0):
                         #hold = LogRegOld(n, cardY, canonical=False)
 
                     if type == "ML":
-                        h.fit(X, Y)
+                        h.fit(X, randY)
                         #hold.fit(X,Y)
                         prior= None
                     elif type == "MAP":
-                        h.fit(X, Y,  ess= prior[0], mean0= 0, w_mean0= prior[1], cov0= 1, w_cov0= prior[2])
+                        h.fit(X, randY,  ess= prior[0], mean0= 0, w_mean0= prior[1], cov0= 1, w_cov0= prior[2])
 
                     pY= h.getClassProbs(X)
                     #pYold= h.getClassProbs(X)
                     prevError= np.inf
-                    actError= np.average(1- pY[np.arange(m), Y])
+                    actError= np.average(Y != np.argmax(pY, axis=1))
                     iniError= actError
                     minError= actError
                     minIter= 1
@@ -121,10 +121,7 @@ def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0):
                         pY = h.getClassProbs(X)
                         #pYold= hold.getClassProbs(X)
 
-                        actError= np.average(1- pY[np.arange(m), Y])
-                        #oldError= np.average(1- pYold[np.arange(m), Y])
-                        #if int(np.log2(iter)) < int(np.log2(iter + 1)):
-                        #    print(f"error diference: {actError-oldError}")
+                        actError= np.average(Y != np.argmax(pY, axis=1))
 
                         if actError< minError:
                             minError= actError
@@ -173,7 +170,7 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
     res = []
     classif = "QDA"
     algorithm= "RD"
-    types= ["MAP","ML"]
+    types= ["ML", "MAP"]
 
 
     for dataName in dataNames:
@@ -183,7 +180,7 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
             X, Y= preprocess_data(X, Y)
             cardY = np.unique(Y).shape[0]
             m, n = X.shape
-            priors = [(0, 0, 0), (1, 0, 0), (1, 1, 1), (cardY, 1, 1)]
+            priors = [(cardY, 1, 1)]
 
             print(dataName)
             print("########")
@@ -205,13 +202,17 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
                 for prior in priors:
                     if type == 'ML':
                         h.fit(X,Y)
+                        prior= None
                     elif type == 'MAP':
                         #h.fit(X,Y,ess= cardY, mean0= 0, w_mean0=cardY, cov0= 1, w_cov0= cardY)
                         h.fit(X,Y,ess= prior[0], mean0= 0, w_mean0=prior[1], cov0= 1, w_cov0= prior[2])
 
                     pY= h.getClassProbs(X)
                     prevError= np.inf
-                    actError= np.average(1- pY[np.arange(m), Y])
+                    actError=  np.average(Y != np.argmax(pY, axis=1))
+                    iniError= actError
+                    minError= actError
+                    minIter= 1
 
                     # ['dataset', 'm', 'n, 'algorithm', 'iter.', 'score', 'type', 'error']
                     res.append([dataName, m, n, classif, algorithm, 1, '0-1', np.average(Y != np.argmax(pY, axis=1))])
@@ -220,10 +221,10 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
 
                     iter= 1
                     print(f"classif {classif} algorithm {algorithm} based on {type} with priors {prior}")
-                    print(f"iter actError     (prevError-actError)  (prevError-actError)< 0.001")
+                    print(f"iter\t actError\t descent")
                     while iter < numIter:
                         if int(np.log2(iter)) < int(np.log2(iter + 1)):
-                            print(f"{iter} {actError} {prevError - actError} {prevError - actError < 0.001}")
+                            print(f"{iter}\t {actError}\t {prevError > actError}")
                         iter +=1
                         prevError= actError
                         if type== 'ML':
@@ -233,12 +234,18 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
                             h.riskDesc(X,Y,lr,ess= prior[0], mean0= 0, w_mean0=prior[1], cov0= 1, w_cov0= prior[2])
 
                         pY = h.getClassProbs(X)
-                        actError= np.average(1- pY[np.arange(m), Y])
+                        if np.sum(np.sum(pY, axis= 1))/m!= 1:
+                            print(f"The class probabilities does not sum one: {np.sum(np.sum(pY, axis= 1))/m}")
+
+                        actError=  np.average(Y != np.argmax(pY, axis=1))
+                        if actError< minError:
+                            minError= actError
+                            minIter= iter
                         # ['seed', 'dataset', 'm', 'n, 'algorithm', 'iter.', 'score', 'type', 'error']
                         res.append([dataName, m, n, classif, algorithm, iter, '0-1', np.average(Y != np.argmax(pY, axis=1))])
                         res.append([dataName, m, n, classif, algorithm, iter, 'log', np.average(- np.log(pY[np.arange(m), Y]))])
                         res.append([dataName, m, n, classif, algorithm, iter, 's0-1', actError])
-                    print(f"{iter} {actError} {prevError - actError} {prevError - actError < 0.001}")
+                    print(f"{iter}\t {actError}\t from {iniError} to {minError} at {minIter}")
 
                     if type== "ML":
                         break
@@ -277,9 +284,10 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
 
     res = []
     classif = "NB"
-    algorithms= ["RD", "GD"]
-    types= ["ML", "MAP"]
+    algorithms= ["RD"]
+    types= ["ML","MAP"]
     card= 5
+    corrections= [0,2]
 
     for dataName in dataNames:
         X, Y = eval("utl.load_" + dataName + '(return_X_y=True)')
@@ -316,9 +324,10 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
 
                 pY = h.getClassProbs(X)
                 prevError = np.inf
-                actError = np.average(1 - pY[np.arange(m), Y])
+                actError=  np.average(Y != np.argmax(pY, axis=1))
                 initError= actError
                 minError= actError
+                minIter= 1
 
                 # ['seed', 'dataset', 'm', 'n, 'classif', 'algorithm', 'iter.', 'score', 'type', 'error']
                 res.append([dataName, m, n, classif, alg, type, 1, '0-1', np.average(Y != np.argmax(pY, axis=1))])
@@ -327,7 +336,8 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
 
 
                 iter = 1
-                print(f"classif {classif} algorithm {alg} based on {type}")
+                #print(f"classif {classif} algorithm {alg} based on {type}")
+                print(f"classifier {classif} algorithm {alg} based on {type}")
                 print(f"iter actError     descend")
                 while iter < numIter:
                     if int(np.log2(iter)) < int(np.log2(iter + 1)):
@@ -343,13 +353,19 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
                         h.gradDesc(X, Y, lr)
 
                     pY = h.getClassProbs(X)
-                    actError = np.average(Y != np.argmax(pY, axis=1))
-                    if minError>actError: minError= actError
+
+                    #print(f"nans in \tpy {np.isnan(pY_).any()}\t in log py {np.isnan(pY).any()}")
+
+                    actError=  np.average(Y != np.argmax(pY, axis=1))
+                    if minError>actError:
+                        minError= actError
+                        minIter= iter
                     # ['seed', 'dataset', 'm', 'n, 'algorithm', 'iter.', 'score', 'type', 'error']
                     res.append([dataName, m, n, classif, alg, type, iter, '0-1', np.average(Y != np.argmax(pY, axis=1))])
                     res.append([dataName, m, n, classif, alg, type, iter, 'log', np.average(- np.log(pY[np.arange(m), Y]))])
                     res.append([dataName, m, n, classif, alg, type, iter, 's0-1', actError])
-                print(f"{iter}\t{actError} from {initError} min {minError}")
+
+                print(f"{iter}\t {actError} from {initError} min {minError} at iter {minIter}")
                 #except Exception as e:
                     # Handling the exception by printing its description
                 #    print(f"Exception in data {dataName} with algorithm {alg} type {type} at iter {iter}:\n {e}")
@@ -455,9 +471,10 @@ def experiments_RF(lr= 0.1, numIter=16, seed= 0):
 
 
 if __name__ == '__main__':
-    experiments_NB(numIter=64,lr=0.1)
-    #experiments_logisticRegression(numIter=64,lr=0.1)
-    #experiments_QDA(numIter= 4)
+    experiments_QDA(numIter= 64)
+    experiments_NB(numIter=64)
+    experiments_logisticRegression(numIter=64)
+
 
     #experiments_RF(numIter= 4)
     #experiments_logisticRegression()

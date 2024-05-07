@@ -246,7 +246,7 @@ class LogReg:
             self.kappa -= lr * d_kappa
 
 
-    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0, correction= False):
+    def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0, correct_forbidden_stats= True):
         '''
 
         :param X: Instances
@@ -269,7 +269,8 @@ class LogReg:
         self.sy -= lr * d_sy
         self.s2y -= lr * d_s2y
 
-        if correction:
+        if correct_forbidden_stats:
+            '''
             aux= lr
             while np.any(self.my <= 0.001) or np.any(self.s2y <= 0.001):
                 self.m += aux * d_m
@@ -281,11 +282,10 @@ class LogReg:
                 self.my -= aux * d_my
                 self.sy -= aux * d_sy
                 self.s2y -= aux * d_s2y
-        elif np.any(self.my <= 0.000) or np.any(self.s2y <= 0.000):
-            self.m += lr * d_m
-            self.my += lr * d_my
-            self.sy += lr * d_sy
-            self.s2y += lr * d_s2y
+            '''
+            if np.any(self.my <= 0.000):
+                self.my += lr * d_my
+                v= self.s2y - self.sy/self.my[:,np.newaxis]
 
         self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
 
