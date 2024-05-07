@@ -401,6 +401,7 @@ class QDA:
         self.s1_y -= lr * d_s1_y
         self.s2_y -= lr * d_s2_y
 
+        '''
         if correct_forbidden_stats:
             if np.any(self.m_y < 0):
                 self.m_y -= lr * d_m_y
@@ -412,6 +413,7 @@ class QDA:
                     None
                 self.s2_y[y,:,:][np.ix_(feats,feats)]+= lr * d_s2_y[y,:,:][np.ix_(feats,feats)]
                 self.s1_y[y][feats]+= lr * d_s1_y[y][feats]
+        '''
 
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)

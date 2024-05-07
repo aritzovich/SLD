@@ -79,7 +79,8 @@ def createTable_datasets(name= "./Results/results_exper_QDA_lr0.1.csv"):
 
     print("\\begin{table}[h]\n\centering")
     print(df.to_latex(float_format=lambda x: '{:.3f}'.format(x), index = False))
-    print("\caption{Data sets}\n\end{table}")
+    print("\caption{Data sets. Index column contain the identifier used in the tables with empirical results, "
+          "and the columns $m$ and $n$ correspond to the number of instances and variables of each dataset.}\n\end{table}")
 
 
 def createTable_NB(name= "./Results/results_exper_QNB_lr0.1.csv", score_to_print="0-1", threshold= 0):
@@ -141,7 +142,7 @@ def createTable_NB(name= "./Results/results_exper_QNB_lr0.1.csv", score_to_print
 
 
 
-def createTable_QDA(name= "./Results/results_exper_QNB_lr0.1.csv", score_to_print="0-1", threshold= 0):
+def createTable_QDA(name= "./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1", threshold= 0):
 
 
     ref_to_stop_loss="0-1"
@@ -152,40 +153,42 @@ def createTable_QDA(name= "./Results/results_exper_QNB_lr0.1.csv", score_to_prin
 
     df= df.sort_values(by=["data","iter"])
 
-
-
     ind= 0
-    for _, group in df.groupby(["data"]):
-        ind+= 1
-        try:
-            row=list()
-            data= group[group["iter"] == 1]['data'].values[0]
-            row.append(ind)
-            row.append(group[(group["iter"] == 1) & (group["loss"] == score_to_print)]['val'].values[0])
-            for iter in range(2,np.max(group["iter"])+1):
-                #print(str(group[(group["iter"] == iter-1) & (group["loss"] == "s0-1")]["val"].values[0]))
-                if (group[(group["iter"] == iter-1) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]
-                        - group[(group["iter"] == iter) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]< threshold):
-                    row.append(group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0])
-                    row.append(iter-1)
-                    break
-                elif iter == np.max(group["iter"]):
-                    row.append(group[(group["iter"] == iter) & (group["loss"] == score_to_print)]['val'].values[0])
-                    row.append(iter)
+    for type in ["ML","MAP"]:
+        list_to_print= list()
 
-            list_to_print.append(row)
-        except Exception as e:
-            # Handling the exception by printing its description
-            print(f"Exception {e} in data {data}")
+        df_type= df[df["type"]== type]
+        for _, group in df_type.groupby(["data"]):
+            ind+= 1
+            try:
+                row=list()
+                data= group[group["iter"] == 1]['data'].values[0]
+                row.append(ind)
+                row.append(group[(group["iter"] == 1) & (group["loss"] == score_to_print)]['val'].values[0])
+                for iter in range(2,np.max(group["iter"])+1):
+                    #print(str(group[(group["iter"] == iter-1) & (group["loss"] == "s0-1")]["val"].values[0]))
+                    if (group[(group["iter"] == iter-1) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]
+                            - group[(group["iter"] == iter) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]< threshold):
+                        row.append(group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0])
+                        row.append(iter-1)
+                        break
+                    elif iter == np.max(group["iter"]):
+                        row.append(group[(group["iter"] == iter) & (group["loss"] == score_to_print)]['val'].values[0])
+                        row.append(iter)
+
+                list_to_print.append(row)
+            except Exception as e:
+                # Handling the exception by printing its description
+                print(f"Exception {e} in data {data}")
 
 
-    columns= ["Index", "ML", "RD", "Iter"]
-    df_to_print= pd.DataFrame(list_to_print, columns=columns)
-    df_to_print["Iter"]= df_to_print["Iter"].astype(int)
+        columns= ["Index", type, "RD", "Iter"]
+        df_to_print= pd.DataFrame(list_to_print, columns=columns)
+        df_to_print["Iter"]= df_to_print["Iter"].astype(int)
 
-    print("\\begin{table}[h]\n\centering")
-    print(df_to_print.to_latex(float_format=lambda x: '{:.3f}'.format(x), index=False))
-    print("\caption{Error of QDA: " + f"{score_to_print}" + "}\n\end{table}")
+        print("\\begin{table}[h]\n\centering")
+        print(df_to_print.to_latex(float_format=lambda x: '{:.3f}'.format(x), index=False))
+        print("\caption{Error of QDA " + f"with {type} under {score_to_print}" + "}\n\end{table}")
 
 def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1", threshold= 0):
 
@@ -211,7 +214,7 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
                 row.append(group[(group["iter"] == 1) & (group["loss"] == score_to_print)]['val'].values[0])
                 for iter in range(2,np.max(group["iter"])+1):
                     if (group[(group["iter"] == iter-1) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]
-                            - group[(group["iter"] == iter) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]<= threshold):
+                            - group[(group["iter"] == iter) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]< threshold):
                         row.append(group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0])
                         row.append(iter-1)
                         score_RD= group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0]
@@ -245,7 +248,7 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
 
 
 if __name__ == '__main__':
-    createTable_datasets()
-#    createTable_QDA(name="./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1")
-#    createTable_NB(name="./Results/results_exper_NB_lr0.1.csv.2", score_to_print="0-1")
-    createTable_LogReg(name="./Results/results_exper_LR_lr0.1.csv.2", score_to_print="0-1")
+    #createTable_datasets()
+    #createTable_QDA(name="./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1")
+    #createTable_NB(name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1")
+    createTable_LogReg(name="./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1")
