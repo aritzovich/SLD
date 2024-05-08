@@ -1,13 +1,5 @@
-import zipfile
-from os.path import join, dirname
-import csv
-import numpy as np
-from sklearn.datasets._base import Bunch, load_files, load_csv_data#load_data,
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import KBinsDiscretizer
-import pandas as pd
 
-def load_mnist_features_resnet18(with_info=False, split=False):
+def load_mnist(return_X_y=False, split=False):
     """Load and return the MNIST Data Set features extracted using a
     pretrained ResNet18 neural network (classification).
 
@@ -84,7 +76,7 @@ def load_mnist_features_resnet18(with_info=False, split=False):
     data = trans.fit_transform(data)
 
     target = normalizeLabels(target)
-    if not with_info:
+    if return_X_y:
         if split:
             # X_train, X_test, Y_train, Y_test
             X_train = data[:60000, :]
@@ -101,7 +93,7 @@ def load_mnist_features_resnet18(with_info=False, split=False):
         return Bunch(data=data, target=target, DESCR=descr_text)
 
 
-def load_catsvsdogs_features_resnet18(with_info=False, split=False):
+def load_catsvsdogs(return_X_y=False, split=False):
     """Load and return the Cats vs Dogs Data Set features extracted using a
     pretrained ResNet18 neural network (classification).
 
@@ -156,7 +148,7 @@ def load_catsvsdogs_features_resnet18(with_info=False, split=False):
     data = trans.fit_transform(data)
     target = normalizeLabels(target)
 
-    if not with_info:
+    if return_X_y:
         if split:
             # X_train, X_test, Y_train, Y_test
             X_train = data[:20000, :]
@@ -173,7 +165,7 @@ def load_catsvsdogs_features_resnet18(with_info=False, split=False):
         return Bunch(data=data, target=target, DESCR=descr_text)
 
 
-def load_cifar10_features_resnet18(with_info=False, split=False):
+def load_cifar10(return_X_y=False, split=False):
     """Load and return the CIFAR10 Data Set features extracted using a
     pretrained ResNet18 neural network (classification).
     """
@@ -195,7 +187,7 @@ def load_cifar10_features_resnet18(with_info=False, split=False):
     return data, target
 
 
-def load_fashion_mnist_features_resnet18(with_info=False, split=False):
+def load_fashion_mnist(return_X_y=False, split=False):
     """Load and return the CIFAR10 Data Set features extracted using a
     pretrained ResNet18 neural network (classification).
     """
@@ -218,7 +210,7 @@ def load_fashion_mnist_features_resnet18(with_info=False, split=False):
     return data, target
 
 
-def load_yearbook_features_resnet18(with_info=False, split=False):
+def load_yearbook(return_X_y=False, split=False):
     """Load and return the Yearbook Data Set features extracted using a
     pretrained ResNet18 neural network (classification).
 
