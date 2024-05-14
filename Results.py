@@ -153,10 +153,10 @@ def createTable_QDA(name= "./Results/results_exper_QDA_lr0.1.csv", score_to_prin
 
     df= df.sort_values(by=["data","iter"])
 
-    ind= 0
     for type in ["ML","MAP"]:
         list_to_print= list()
 
+        ind = 0
         df_type= df[df["type"]== type]
         for _, group in df_type.groupby(["data"]):
             ind+= 1
@@ -246,9 +246,134 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
         print(df_to_print.to_latex(float_format=lambda x: '{:.3f}'.format(x), index = False))
         print("\caption{Error of LR " + f"with {type} under {score_to_print}" + "}\n\end{table}")
 
+def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1", threshold= 0):
+
+    ref_to_stop_loss = "0-1"
+
+    df= pd.read_csv(name)
+    df= df.sort_values(by=["data","iter"])
+
+    for type in ["ML","MAP"]:
+        list_to_print= list()
+
+        df_RD= df[(df["alg"]=="RD") & (df["type"]== type)]
+        df_GD= df[(df["alg"]=="GD") & (df["type"]== type)]
+
+        ind= 0
+        for _, group in df_RD.groupby(["data"]):
+            ind+= 1
+            try:
+                row=list()
+                data= group[group["iter"] == 1]['data'].values[0]
+                group_GD= df_GD[df_GD["data"]== data]
+                row.append(ind)
+                row.append(group[(group["iter"] == 1) & (group["loss"] == score_to_print)]['val'].values[0])
+                for iter in range(2,np.max(group["iter"])+1):
+                    if (group[(group["iter"] == iter-1) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]
+                            - group[(group["iter"] == iter) & (group["loss"] == ref_to_stop_loss)]["val"].values[0]< threshold):
+                        row.append(group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0])
+                        row.append(iter-1)
+                        score_RD= group[(group["iter"] == iter-1) & (group["loss"] == score_to_print)]['val'].values[0]
+                        iter_RD= iter-1
+                        break
+                    elif iter == np.max(group["iter"]):
+                        row.append(group[(group["iter"] == iter) & (group["loss"] == score_to_print)]['val'].values[0])
+                        row.append(iter)
+                        score_RD= group[(group["iter"] == iter) & (group["loss"] == score_to_print)]['val'].values[0]
+                        iter_RD= iter
+
+                row.append(group_GD[(group_GD["iter"]==iter_RD) & (group_GD["loss"] == score_to_print)]['val'].values[0])
+                for iter in range(1,np.max(group_GD["iter"])+1):
+                    if group_GD[(group_GD["iter"] == iter) & (group_GD["loss"] == score_to_print)]["val"].values[0]<= score_RD:
+                        row.append(iter)
+                        break
+                    if iter== np.max(group_GD["iter"]):
+                        row.append("-")
+
+                list_to_print.append(row)
+            except Exception as e:
+                # Handling the exception by printing its description
+                print(f"Exception {e} in data {data}")
+
+
+        columns= ["Index", type, "RD", "Iter", "GD", "Reach"]
+        df_to_print= pd.DataFrame(list_to_print, columns=columns)
+        print("\\begin{table}[h]\n\centering")
+        print(df_to_print.to_latex(float_format=lambda x: '{:.3f}'.format(x), index = False))
+        print("\caption{Error of LR " + f"with {type} under {score_to_print} loss" + "}\n\end{table}")
+
+
+def createTable_minVals(classif= "LR", name= "./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1",  algorithms= ["RD", "GD"]):
+
+    df= pd.read_csv(name)
+    df= df.sort_values(by=["data","iter"])
+
+    for type in ["ML","MAP"]:
+        list_to_print= list()
+
+        df_type= df[(df["type"]== type) & (df["loss"] == score_to_print)]
+
+        ind= 0
+        for data, group in df_type.groupby(["data"]):
+            ind+= 1
+            try:
+                row=list()
+                row.append(ind)
+                init_val= group[group['iter']==1]['val'].values[0]
+                row.append('{:.3f}'.format(init_val))
+
+                if len(algorithms)==2:
+                    df_alg = group[(group['alg'] == "RD")]
+                    # Find the minimum value(s) of the "val" column
+                    min_val_RD = df_alg['val'].min()
+                    min_iter_RD = df_alg[df_alg['val'] == min_val_RD]['iter'].min()
+                    df_alg = group[(group['alg'] == "GD")]
+                    # Find the minimum value(s) of the "val" column
+                    min_val_GD = df_alg['val'].min()
+                    min_iter_GD = df_alg[df_alg['val'] == min_val_GD]['iter'].min()
+
+                    if min_val_RD< min_val_GD:
+                        row.append(r"ttextbf{"+str('{:.3f}'.format(min_val_RD))+"}t")
+                    else:
+                        row.append(str('{:.3f}'.format(min_val_RD)))
+                    row.append(min_iter_RD)
+
+                    if min_val_GD< min_val_RD:
+                        row.append('ttextbf{'+str('{:.3f}'.format(min_val_GD))+"}t")
+                    else:
+                        row.append(str('{:.3f}'.format(min_val_GD)))
+                    row.append(min_iter_GD)
+
+                else:
+                    df_alg = group[(group['alg'] == "RD")]
+                    # Find the minimum value(s) of the "val" column
+                    min_val = df_alg['val'].min()
+                    row.append('{:.3f}'.format(min_val))
+                    min_iter = df_alg[df_alg['val'] == min_val]['iter'].min()
+                    row.append(min_iter)
+
+                list_to_print.append(row)
+            except Exception as e:
+                # Handling the exception by printing its description
+                print(f"Exception {e} in data {data}")
+
+
+        columns= ["Index", type]
+        if "RD" in algorithms: columns += ["RD", "Iter"]
+        if "GD" in algorithms: columns += ["GD", "Iter"]
+        df_to_print= pd.DataFrame(list_to_print, columns=columns)
+        print("\\begin{table}[h]\n\centering")
+        print(df_to_print.to_latex(index = False))
+        print("\caption{Empirical risk of" + f" {classif} with {type} under {score_to_print}. The column {type} shows the error "
+                                    f"for the {type} learning algorithm. The columns RD and GD show the minimum errors "
+                                    f"obtained, and the columns Iter the number of iterations required to reach the minimum." + "}\n\end{table}")
+
+
 
 if __name__ == '__main__':
     #createTable_datasets()
     #createTable_QDA(name="./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1")
     #createTable_NB(name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1")
-    createTable_LogReg(name="./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1")
+    createTable_minVals(classif="NB", name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1", algorithms=["RD","GD"])
+    #createTable_minVals(classif="LR", name="./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1", algorithms=["RD", "GD"])
+

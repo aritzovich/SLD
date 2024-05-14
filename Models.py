@@ -35,6 +35,51 @@ def project_onto_simplex(v):
         w = np.maximum(v - theta, 0)  # Project v onto the simplex
         return w
 
+def closest_non_singular_matrix(A, epsilon=1e-6):
+    """
+    Obtain the closest non-singular matrix to a given singular matrix by perturbing its singular values.
+
+    Parameters:
+        A (numpy.ndarray): Singular matrix.
+        epsilon (float): Small positive value for replacing zero singular values.
+
+    Returns:
+        numpy.ndarray: Closest non-singular matrix.
+    """
+    # Compute singular value decomposition
+    U, Sigma, Vt = np.linalg.svd(A)
+
+    # Replace zero singular values with a small positive value
+    Sigma[Sigma < epsilon] = epsilon
+
+    # Reconstruct matrix with modified singular values
+    A_prime = U @ np.diag(Sigma) @ Vt
+
+    return A_prime
+
+
+def log_multivariate_gaussian(X, mean, cov):
+    """
+    Compute the log-pdf of multivariate Gaussian distribution for multiple instances.
+
+    Parameters:
+        X (numpy.ndarray): Input matrix where each row represents an instance.
+        mean (numpy.ndarray): Mean vector of the Gaussian distribution.
+        cov (numpy.ndarray): Covariance matrix of the Gaussian distribution.
+
+    Returns:
+        numpy.ndarray: Log-pdf of the multivariate Gaussian distribution for each instance.
+    """
+    # Compute the log determinant of the covariance matrix
+    log_det_cov = np.linalg.slogdet(cov)[1]
+
+    # Compute the Mahalanobis distance for each instance (use no.linalg.pinv, the pseudoinverse)
+    mahalanobis = np.sum(np.dot((X - mean), np.linalg.pinv(cov)) * (X - mean), axis=1)
+
+    # Compute the log-pdf for each instance
+    log_pdf = -0.5 * (log_det_cov + mahalanobis + len(mean) * np.log(2 * np.pi))
+
+    return log_pdf
 
 
 class LinearClassifier:
@@ -211,7 +256,7 @@ class NaiveBayesDisc:
         self.statsToParams(ess)
 
 
-    def gradDesc(self, X, Y, lr= 0.1):
+    def gradDesc(self, X, Y, lr= 0.1, opt_normalization= 0):
         '''
         Gradient descent for the discrete naive Bayes classifiers. The gradient is computed for the parameters
         (probabilities) in their logarithm form to avoid negative parameters. Once the gradient descent is computed
@@ -219,6 +264,10 @@ class NaiveBayesDisc:
 
         :param X: unlabeled instances
         :param Y: labels
+        :param lr: learning rate
+        :opt_normalization: normalization of the parameters to reflect probability tables.
+            O (default): project into the simplex
+            1: project using softmax
         :return:
         '''
 
@@ -234,10 +283,13 @@ class NaiveBayesDisc:
         d_alpha_y= np.sum(dif, axis= 0)/m
         alpha_y= np.log(self.class_probs)
         alpha_y -= lr * d_alpha_y
-        self.class_probs= np.exp(alpha_y)
-        # Normalize the probability table by projecting into the simplex
-        self.class_probs= project_onto_simplex(self.class_probs)
 
+        if opt_normalization== 0:
+            # Normalize the probability table by projecting into the simplex
+            self.class_probs = project_onto_simplex(np.exp(alpha_y))
+        else:
+            # Normalization using softmax
+            self.class_probs= softmax(alpha_y)
 
         d_beta_y= np.zeros(self.card)
         for j in np.arange(self.num_features):
@@ -248,10 +300,13 @@ class NaiveBayesDisc:
 
                 beta_y = np.log(self.cond_probs[j,:,c])
                 beta_y -= lr * d_beta_y
-                # Normalize each probability table by projecting into the simplex
-                self.cond_probs[j, :, c]= project_onto_simplex(np.exp(beta_y))
 
-
+                if opt_normalization== 0:
+                    # Normalize each probability table by projecting into the simplex
+                    self.cond_probs[j, :, c] = project_onto_simplex(np.exp(beta_y))
+                else:
+                    #Normalization using softmax
+                    self.cond_probs[j, :, c]= softmax(beta_y)
 
     def getClassProbs_(self, X):
         m,n= X.shape
@@ -273,12 +328,9 @@ class NaiveBayesDisc:
                 log_pY[:, y] += np.log(self.cond_probs[j, X[:,j], y])
         return softmax(log_pY, axis= 1)
 
-
-
     def predict(self, X):
         pY= self.getClassProbs(X)
         return np.argmax(pY, axis= 1)
-
 
 class QDA:
     def __init__(self, cardY, n):
@@ -379,13 +431,19 @@ class QDA:
         self.statsToParams(ess= ess, mean0= mean0, w_mean0=w_mean0, cov0= cov0, w_cov0= cov0)
 
     def getClassProbs(self, X):
+
         m= X.shape[0]
         pY= np.zeros((m,self.cardY))
+        #aux_pY= np.zeros((m,self.cardY))
         for c in np.arange(self.cardY):
-            mvn = multivariate_normal(mean=self.mean_y[c,:], cov=self.cov_y[c,:,:], allow_singular= True)
-            pY[:,c]= mvn.pdf(X)*self.p_y[c]
+            log_mvn= log_multivariate_gaussian(X= X, mean=self.mean_y[c,:], cov=self.cov_y[c,:,:])
+            pY[:, c] = log_mvn + np.log(self.p_y[c])
+            #mvn = multivariate_normal(mean=self.mean_y[c,:], cov=self.cov_y[c,:,:], allow_singular= True)
+            #aux_pY[:,c]= mvn.pdf(X)*self.p_y[c]
 
-        pY/= np.sum(pY, axis= 1, keepdims= True)
+        #aux_pY/= np.sum(aux_pY, axis= 1, keepdims= True)
+        pY= softmax(pY, axis=1)
+
         return pY
 
     def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0, correct_forbidden_stats= False):
@@ -417,6 +475,94 @@ class QDA:
 
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)
+
+    def _multiply_W_and_X2(self,W,X):
+        # Reshape X to (m, n, 1) and X transposed to (m, 1, n) for broadcasting
+        X_reshaped = X[:, :, np.newaxis]
+        X_transposed_reshaped = X[:, np.newaxis, :]
+        # Perform element-wise multiplication
+        M = X_reshaped * X_transposed_reshaped
+        # Reshape W to (m, 1, n, n) for broadcasting
+        M_reshaped = M[:, np.newaxis, :, :]
+        # Reshape W to (m, r, 1, 1) for broadcasting
+        W_reshaped = W[:, :, np.newaxis, np.newaxis]
+
+        # Perform element-wise multiplication
+        A = M_reshaped * W_reshaped
+        return A
+
+    def _multiply_W_and_X(self,W,X):
+        # Reshape Y to have the same shape as X
+        W_reshaped = W[:, :, np.newaxis]
+        # Perform element-wise multiplication
+        M = X[:, np.newaxis, :] * W_reshaped
+        return M
+
+    def gradDesc(self, X, Y, lr= 0.1):
+
+        m,n= X.shape
+
+
+        # one-hot encoding of Y
+        oh = np.zeros((m, self.cardY))
+        oh[np.arange(m), Y] = 1
+        pY= self.getClassProbs(X)
+
+        dif= pY - oh
+        # avoid class conditional probabilities with NaNs.
+        nan_rows= np.isnan(dif).any(axis= 1)
+        dif= dif[~nan_rows, :]
+        X= X[~nan_rows, :]
+        m= dif.shape[0]
+        sum= np.average(dif, axis= 0)
+
+
+        # Change the parameters to the exponential form
+        # log p(y)
+        nu_0= np.log(self.p_y)
+        #cov^-1 * mu
+        nu_1= np.zeros_like(self.mean_y)
+        #-1/2 * cov^-1
+        nu_2= np.zeros_like(self.cov_y)
+        nu_2_inv= np.zeros_like(self.cov_y)
+        for c in range(self.cardY):
+            inv_cov= np.linalg.pinv(self.cov_y[c])
+            nu_1[c]= np.dot(inv_cov, self.mean_y[c])
+            nu_2[c]= -0.5 * inv_cov
+            nu_2_inv[c]= -2 * self.cov_y[c]
+
+
+        # Compute the gradients of the parameters in the exponential form
+        d_nu_0= sum
+
+        d_nu_1= np.sum(self._multiply_W_and_X(dif,X), axis= 0)
+        for c in np.arange(self.cardY):
+            d_nu_1[c]+= 0.5* sum[c] * np.matmul(nu_2_inv[c], nu_1[c])
+
+        d_nu_2= np.sum(self._multiply_W_and_X2(dif,X), axis= 0)
+        for c in np.arange(self.cardY):
+            d_nu_2[c]+= -0.25 * sum[c] * np.dot(np.dot(nu_2_inv[c], np.outer(nu_1[c],nu_1[c])), nu_2_inv[c])
+            d_nu_2[c]+= 0.5* sum[c] * np.trace(nu_2_inv[c])
+
+        # Apply the gradient
+        nu_0 -= lr * d_nu_0
+        nu_1 -= lr * d_nu_1
+        nu_2 -= lr * d_nu_2
+
+        # Transform the parameters into the standard form and transorm to get valid param values: probs, means and covariances
+        # Get probabilities using softmax
+        # p_y= exp{nu_0}
+        self.p_y = softmax(nu_0)
+        epsilon= 10**-2
+        for c in range(self.cardY):
+            #mu(y)= -1/2 nu_2(y)^-1 nu_1(y)
+            self.mean_y[c]= -0.5* np.linalg.inv(nu_2[c]).dot(nu_1[c])
+
+            # Get the closes covarianze matrix using eignevalue decomposition
+            #cov(y)= -1/2 nu_2(y)^-1
+            self.cov_y[c]= closest_non_singular_matrix(-0.5* np.linalg.inv(nu_2[c]), epsilon= epsilon)
+
+
 
     def predict(self, X):
         pY= self.getClassProbs(X)

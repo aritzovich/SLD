@@ -95,7 +95,6 @@ def normalizeLabels(origY):
 
     return Y
 
-
 def getDataNames():
     return ['adult',
                'iris',
@@ -126,7 +125,6 @@ def getDataNames():
                'pulsar',
                'QSAR',
                 'splice']
-
 
 
 def load_mnist_features_resnet18(with_info=False, split=False):
@@ -217,7 +215,6 @@ def load_mnist_features_resnet18(with_info=False, split=False):
         return Bunch(data=data, target=target, DESCR=descr_text)
     return 0
 
-
 def load_catsvsdogs_features_resnet18(with_info=False):
     """Load and return the Cats vs Dogs Data Set features extracted using a
     pretrained ResNet18 neural network (classification).
@@ -274,7 +271,6 @@ def load_catsvsdogs_features_resnet18(with_info=False):
 
     return Bunch(data=data, target=normalizeLabels(target),
                  DESCR=descr_text)
-
 
 def load_yearbook_features_resnet18(with_info=False, with_attributes=False):
     """Load and return the Yearbook Data Set features extracted using a
