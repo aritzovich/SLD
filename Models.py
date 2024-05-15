@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import multivariate_normal
 from scipy.special import softmax
-
+import scipy.linalg as la
 
 def project_onto_simplex(v):
     """
@@ -46,8 +46,11 @@ def closest_non_singular_matrix(A, epsilon=1e-6):
     Returns:
         numpy.ndarray: Closest non-singular matrix.
     """
+
+    np.fill_diagonal(A, np.maximum(np.diagonal(A), epsilon))
+
     # Compute singular value decomposition
-    U, Sigma, Vt = np.linalg.svd(A)
+    U, Sigma, Vt = np.linalg.svd(A, hermitian= True)
 
     # Replace zero singular values with a small positive value
     Sigma[Sigma < epsilon] = epsilon
@@ -514,7 +517,7 @@ class QDA:
         dif= dif[~nan_rows, :]
         X= X[~nan_rows, :]
         m= dif.shape[0]
-        sum= np.average(dif, axis= 0)
+        sum= np.sum(dif, axis= 0)
 
 
         # Change the parameters to the exponential form
@@ -533,16 +536,19 @@ class QDA:
 
 
         # Compute the gradients of the parameters in the exponential form
-        d_nu_0= sum
+        d_nu_0= sum/m
 
-        d_nu_1= np.sum(self._multiply_W_and_X(dif,X), axis= 0)
+        #d R(nu)/d nu_1|d=  1/m sum_{x,y} [y==d](x + 1/2 nu_2|d^-1 \nu_1|d
+        d_nu_1= np.sum(self._multiply_W_and_X(dif,X), axis= 0)/m
         for c in np.arange(self.cardY):
-            d_nu_1[c]+= 0.5* sum[c] * np.matmul(nu_2_inv[c], nu_1[c])
+            d_nu_1[c]+= 0.5* sum[c] * np.matmul(nu_2_inv[c], nu_1[c])/m
 
-        d_nu_2= np.sum(self._multiply_W_and_X2(dif,X), axis= 0)
+
+        #d R(nu)/d nu_2|d= 1/m sum_{x,y} (h(d|x) - [d==y])(x·x^t - 1/4 · nu_2|d^-1 · nu_1,d · nu_1|d^t · nu_2|d^-1 + 1/2 tr(nu_2|d^-1)
+        d_nu_2= np.sum(self._multiply_W_and_X2(dif,X), axis= 0)/m
         for c in np.arange(self.cardY):
-            d_nu_2[c]+= -0.25 * sum[c] * np.dot(np.dot(nu_2_inv[c], np.outer(nu_1[c],nu_1[c])), nu_2_inv[c])
-            d_nu_2[c]+= 0.5* sum[c] * np.trace(nu_2_inv[c])
+            d_nu_2[c]+= -0.25 * sum[c] * np.dot(np.dot(nu_2_inv[c], np.outer(nu_1[c],nu_1[c])), nu_2_inv[c])/m
+            d_nu_2[c]+= 0.5* sum[c] * np.trace(nu_2_inv[c])/m
 
         # Apply the gradient
         nu_0 -= lr * d_nu_0
@@ -553,7 +559,7 @@ class QDA:
         # Get probabilities using softmax
         # p_y= exp{nu_0}
         self.p_y = softmax(nu_0)
-        epsilon= 10**-2
+        epsilon= 10**-3
         for c in range(self.cardY):
             #mu(y)= -1/2 nu_2(y)^-1 nu_1(y)
             self.mean_y[c]= -0.5* np.linalg.inv(nu_2[c]).dot(nu_1[c])

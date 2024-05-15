@@ -303,7 +303,7 @@ def createTable_LogReg(name= "./Results/results_exper_LR_lr0.1.csv", score_to_pr
         print("\caption{Error of LR " + f"with {type} under {score_to_print} loss" + "}\n\end{table}")
 
 
-def createTable_minVals(classif= "LR", name= "./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1",  algorithms= ["RD", "GD"]):
+def createTable_minVals(classif= "LR", name= "./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1",  algorithms= ["RD", "GD"], print_index= True):
 
     df= pd.read_csv(name)
     df= df.sort_values(by=["data","iter"])
@@ -318,7 +318,10 @@ def createTable_minVals(classif= "LR", name= "./Results/results_exper_LR_lr0.1.c
             ind+= 1
             try:
                 row=list()
-                row.append(ind)
+                if print_index:
+                    row.append(ind)
+                else:
+                    row.append(data)
                 init_val= group[group['iter']==1]['val'].values[0]
                 row.append('{:.3f}'.format(init_val))
 
@@ -374,6 +377,6 @@ if __name__ == '__main__':
     #createTable_datasets()
     #createTable_QDA(name="./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1")
     #createTable_NB(name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1")
-    createTable_minVals(classif="NB", name="./Results/results_exper_NB_lr0.1.csv", score_to_print="0-1", algorithms=["RD","GD"])
+    createTable_minVals(classif="QDA", name="./Results/results_exper_QDA_lr0.1.csv", score_to_print="0-1", algorithms=["RD","GD"],print_index= False)
     #createTable_minVals(classif="LR", name="./Results/results_exper_LR_lr0.1.csv", score_to_print="0-1", algorithms=["RD", "GD"])
 
