@@ -479,7 +479,7 @@ class QDA:
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)
 
-    def _multiply_W_and_X2_and_average(self,W,X, batch_size= 500):
+    def _multiply_W_and_X2_and_average(self,W,X, batch_size= 50000):
 
         m,n= X.shape
         A = np.zeros((self.cardY, n, n))
@@ -498,7 +498,7 @@ class QDA:
             A += np.sum(M_reshaped * W_reshaped, axis=0)
         return A/m
 
-    def _multiply_W_and_X_and_average(self, W, X, batch_size=500):
+    def _multiply_W_and_X_and_average(self, W, X, batch_size=50000):
 
         m,n= X.shape
         A = np.zeros((self.cardY, n))
@@ -507,7 +507,7 @@ class QDA:
             W_reshaped = W[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis]
             # Perform element-wise multiplication
             M = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), np.newaxis, :] * W_reshaped
-            A= np.sum(M, axis= 0)
+            A+= np.sum(M, axis= 0)
 
         return A/m
 
