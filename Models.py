@@ -479,20 +479,41 @@ class QDA:
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)
 
-    def _multiply_W_and_X2(self,W,X):
-        # Reshape X to (m, n, 1) and X transposed to (m, 1, n) for broadcasting
-        X_reshaped = X[:, :, np.newaxis]
-        X_transposed_reshaped = X[:, np.newaxis, :]
-        # Perform element-wise multiplication
-        M = X_reshaped * X_transposed_reshaped
-        # Reshape W to (m, 1, n, n) for broadcasting
-        M_reshaped = M[:, np.newaxis, :, :]
-        # Reshape W to (m, r, 1, 1) for broadcasting
-        W_reshaped = W[:, :, np.newaxis, np.newaxis]
+    def _multiply_W_and_X2_and_average(self,W,X, batch_size= 500):
 
-        # Perform element-wise multiplication
-        A = M_reshaped * W_reshaped
-        return A
+        m,n= X.shape
+        try:
+            A = np.zeros((self.cardY, n, n))
+            for i in range(int(1 + m / batch_size)):
+                # Reshape X to (m, n, 1) and X transposed to (m, 1, n) for broadcasting
+                X_reshaped = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis]
+                X_transposed_reshaped = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), np.newaxis, :]
+                # Perform element-wise multiplication
+                M = X_reshaped * X_transposed_reshaped
+                # Reshape W to (m, 1, n, n) for broadcasting
+                M_reshaped = M[:, np.newaxis, :, :]
+                # Reshape W to (m, r, 1, 1) for broadcasting
+                W_reshaped = W[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis, np.newaxis]
+
+                # Perform element-wise multiplication
+                A += np.sum(M_reshaped * W_reshaped, axis=0)
+            return A/m
+        except:
+            A = np.zeros((self.cardY, n, n))
+            for i in range(int(1 + m / batch_size)):
+                # Reshape X to (m, n, 1) and X transposed to (m, 1, n) for broadcasting
+                X_reshaped = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis]
+                X_transposed_reshaped = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), np.newaxis, :]
+                # Perform element-wise multiplication
+                M = X_reshaped * X_transposed_reshaped
+                # Reshape W to (m, 1, n, n) for broadcasting
+                M_reshaped = M[:, np.newaxis, :, :]
+                # Reshape W to (m, r, 1, 1) for broadcasting
+                W_reshaped = W[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis, np.newaxis]
+
+                # Perform element-wise multiplication
+                A += np.sum(M_reshaped * W_reshaped, axis=0)
+            return A / m
 
     def _multiply_W_and_X(self,W,X):
         # Reshape Y to have the same shape as X
@@ -545,7 +566,7 @@ class QDA:
 
 
         #d R(nu)/d nu_2|d= 1/m sum_{x,y} (h(d|x) - [d==y])(x·x^t - 1/4 · nu_2|d^-1 · nu_1,d · nu_1|d^t · nu_2|d^-1 + 1/2 tr(nu_2|d^-1)
-        d_nu_2= np.sum(self._multiply_W_and_X2(dif,X), axis= 0)/m
+        d_nu_2= self._multiply_W_and_X2_and_average(dif,X)
         for c in np.arange(self.cardY):
             d_nu_2[c]+= -0.25 * sum[c] * np.dot(np.dot(nu_2_inv[c], np.outer(nu_1[c],nu_1[c])), nu_2_inv[c])/m
             d_nu_2[c]+= 0.5* sum[c] * np.trace(nu_2_inv[c])/m
