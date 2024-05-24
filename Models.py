@@ -321,6 +321,37 @@ class NaiveBayesDisc:
                     #Normalization using softmax
                     self.cond_probs[j, :, c]= softmax(beta_y)
 
+    def DFE(self, X, Y, lr= 0.1, ess= 0):
+        '''
+        Risk descent iterative learning algorithm.
+
+        Args:
+            X: Training unlabeled instances
+            Y: Training class labels
+            lr: learning rate
+            correct_negative_stats:
+                1) project negative statistics by using the simplex projection of the associated probabilities
+                2) do not update the table with negative statistics
+
+        Returns:
+
+        '''
+
+        m= X.shape[0]
+        pY = self.getClassProbs(X)
+        E= np.zeros((m,self.cardY))
+        E[np.arange(m), Y] = 1- pY[np.arange(m), Y]
+
+        # compute the change on the statistics
+        d_class_counts, d_feature_counts = self.getStats(X, E)
+
+        self.class_counts += lr * d_class_counts
+        self.feature_counts += lr * d_feature_counts
+
+        # update the parameters from the parameters
+        self.statsToParams(ess)
+
+
     def getClassProbs_(self, X):
         m,n= X.shape
         pY= np.zeros((m, self.cardY))

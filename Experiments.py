@@ -307,8 +307,8 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
 
     res = []
     classif = "NB"
-    algorithms= ["RD", "GD"]
-    types= ["ML","MAP"]
+    algorithms= ["RD", "GD", "DFE"]
+    types= ["ML"]#,"MAP"]
     card= 5
     corrections= [0,2]
 
@@ -373,7 +373,12 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
                             elif type == "MAP":
                                 h.riskDesc(X, Y, lr, ess= ess)
                         elif alg== "GD":
-                            h.gradDesc(X, Y, lr, opt)
+                            h.gradDesc(X, Y, lr)
+                        elif alg== "DFE":
+                            if type == "ML":
+                                h.DFE(X, Y, lr)
+                            elif type == "MAP":
+                                h.DFE(X, Y, lr, ess= ess)
 
                         pY = h.getClassProbs(X)
 
@@ -509,8 +514,8 @@ def experiments_RF(lr= 0.1, numIter=16, seed= 0):
 
 
 if __name__ == '__main__':
-    experiments_QDA(numIter= 64,lr= 0.1)
-    #experiments_NB(numIter=64)
+    #experiments_QDA(numIter= 64,lr= 0.1)
+    experiments_NB(numIter=64)
     #experiments_logisticRegression(numIter=64)
 
     #experiments_RF(numIter= 4)
