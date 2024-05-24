@@ -13,27 +13,15 @@ def project_onto_simplex(v):
     Returns:
     - Projected vector onto the simplex
     """
-
-    try:
-        n = len(v)  # Number of elements in the input vector
-        u = np.sort(v)[::-1]  # Sort the elements of v in descending order
-        cssv = np.cumsum(u) - 1  # Compute the Cumulative Sum of Sorted Values (CSSV)
-        ind = np.arange(1, n + 1)  # Indices from 1 to n
-        cond = u - cssv / ind > 0  # Check the condition for each element
-        rho = ind[cond][-1]  # Find the index where the condition is satisfied
-        theta = cssv[cond][-1] / float(rho)  # Compute theta
-        w = np.maximum(v - theta, 0)  # Project v onto the simplex
-        return w
-    except Exception as e:
-        n = len(v)  # Number of elements in the input vector
-        u = np.sort(v)[::-1]  # Sort the elements of v in descending order
-        cssv = np.cumsum(u) - 1  # Compute the Cumulative Sum of Sorted Values (CSSV)
-        ind = np.arange(1, n + 1)  # Indices from 1 to n
-        cond = u - cssv / ind > 0  # Check the condition for each element
-        rho = ind[cond][-1]  # Find the index where the condition is satisfied
-        theta = cssv[cond][-1] / float(rho)  # Compute theta
-        w = np.maximum(v - theta, 0)  # Project v onto the simplex
-        return w
+    n = len(v)  # Number of elements in the input vector
+    u = np.sort(v)[::-1]  # Sort the elements of v in descending order
+    cssv = np.cumsum(u) - 1  # Compute the Cumulative Sum of Sorted Values (CSSV)
+    ind = np.arange(1, n + 1)  # Indices from 1 to n
+    cond = u - cssv / ind > 0  # Check the condition for each element
+    rho = ind[cond][-1]  # Find the index where the condition is satisfied
+    theta = cssv[cond][-1] / float(rho)  # Compute theta
+    w = np.maximum(v - theta, 0)  # Project v onto the simplex
+    return w
 
 def closest_non_singular_matrix(A, epsilon=1e-6):
     """
@@ -46,9 +34,6 @@ def closest_non_singular_matrix(A, epsilon=1e-6):
     Returns:
         numpy.ndarray: Closest non-singular matrix.
     """
-
-    np.fill_diagonal(A, np.maximum(np.diagonal(A), epsilon))
-
     # Compute singular value decomposition
     U, Sigma, Vt = np.linalg.svd(A, hermitian= True)
 
@@ -60,6 +45,31 @@ def closest_non_singular_matrix(A, epsilon=1e-6):
 
     return A_prime
 
+def make_positive_definite_eig(matrix, epsilon=1e-6):
+    """
+    Ensure the matrix is positive definite by adjusting its eigenvalues.
+
+    Parameters:
+    matrix (np.ndarray): The input symmetric matrix.
+    epsilon (float): The small value to add to the eigenvalues if they are non-positive.
+
+    Returns:
+    np.ndarray: The adjusted positive definite matrix.
+    """
+    # Check if the matrix is symmetric
+    if not np.allclose(matrix, matrix.T):
+        raise ValueError("Matrix is not symmetric")
+
+    # Eigenvalue decomposition
+    eigenvalues, eigenvectors = np.linalg.eigh(matrix)
+
+    # Adjust the eigenvalues to be positive
+    adjusted_eigenvalues = np.maximum(eigenvalues, epsilon)
+
+    # Reconstruct the matrix
+    positive_definite_matrix = (eigenvectors @ np.diag(adjusted_eigenvalues) @ eigenvectors.T)
+
+    return positive_definite_matrix
 
 def log_multivariate_gaussian(X, mean, cov):
     """
@@ -246,7 +256,7 @@ class NaiveBayesDisc:
 
         if correct_forbidden_stats:
             if np.any(self.class_counts < 0):
-                self.class_counts -= lr * d_class_counts
+                self.class_counts += lr * d_class_counts
 
             first, second= np.where((self.feature_counts < 0).any(axis=(1)))
             indices= list(zip(first, second))
@@ -424,7 +434,8 @@ class QDA:
                 # The posterior distribution for the covariance given the data is asumming p(Sigma) is an inverse
                 # Wishart with parameters S_0^-1, nu_0 is a Wishart with parameters [S_0 + S]^-1, nu_o + n where
                 # S is n*cov and n is the number of data points.
-                # According to (Holt,Nguyen) E[Sigma|X,mu)= (S_0 + S)/(nu_0-dim-1 + n)
+                # According to (Holt,Nguyen, p.17, first equation) E[Sigma|X,mu)= (S_0 + S)/(nu_0-dim-1 + n), where
+                # S_0 and Sare the prior and sample sum sum_i=1^n (x_i - theta)^T(x_i - theta).
                 # After a reparametrization, geting one iteration of Gibbs sampling starting at mu and setting
                 # prior_cov= S_0/w_cov with w_cov= nu_0 - dim -1 we get the more intuidive
                 self.cov_y[c, :, :]= (self.m_y[c]* cov + w_cov0 * prior_cov)/(self.m_y[c] + w_cov0)
@@ -479,7 +490,7 @@ class QDA:
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)
 
-    def _multiply_W_and_X2_and_average(self,W,X, batch_size= 50000):
+    def _multiply_W_and_X2_and_average_oldest(self,W,X, batch_size= 50000):
 
         m,n= X.shape
         A = np.zeros((self.cardY, n, n))
@@ -498,6 +509,46 @@ class QDA:
             A += np.sum(M_reshaped * W_reshaped, axis=0)
         return A/m
 
+    def _multiply_W_and_X2_and_average_old(self, W, X):
+        """
+        Compute R of size (r, n, n) where R[i, j, k] = sum_a W[a, i] * X[a, j] * X[a, k]
+
+        Parameters:
+        W (np.ndarray): Input matrix of size (m, r)
+        X (np.ndarray): Input matrix of size (m, n)
+
+        Returns:
+        np.ndarray: Resultant matrix R of size (r, n, n)
+        """
+        m,n= X.shape
+        # Compute the element-wise product of X with itself along the new axes
+        XX = np.einsum('aj,ak->ajk', X, X)  # XX has shape (m, n, n)
+
+        # Compute the tensordot product of W with XX along the first axis of W and XX
+        R = np.tensordot(W, XX, axes=(0, 0))/m  # R has shape (r, n, n)
+
+        return R
+
+    def _multiply_W_and_X2_and_average(self, W, X, batch_size=10000):
+        """
+        Compute R of size (r, n, n) where R[i, j, k] = sum_a W[a, i] * X[a, j] * X[a, k]
+
+        Parameters:
+        W (np.ndarray): Input matrix of size (m, r)
+        X (np.ndarray): Input matrix of size (m, n)
+
+        Returns:
+        np.ndarray: Resultant matrix R of size (r, n, n)
+        """
+        m,n= X.shape
+        R = np.zeros((self.cardY, self.n, self.n))
+        for ind in range(int(1 + m / batch_size)):
+            R+= np.einsum('ai,aj,ak->ijk', W[(ind * batch_size):np.min([(ind + 1) * batch_size, m]),:],
+                         X[(ind * batch_size):np.min([(ind + 1) * batch_size, m]),:],
+                         X[(ind * batch_size):np.min([(ind + 1) * batch_size, m]),:])  # R has shape (r, n, n)
+
+        return R/m
+
     def _multiply_W_and_X_and_average(self, W, X, batch_size=50000):
 
         m,n= X.shape
@@ -511,7 +562,7 @@ class QDA:
 
         return A/m
 
-    def gradDesc(self, X, Y, lr= 0.1):
+    def gradDesc(self, X, Y, lr= 0.1, psd_cov= True):
 
         m,n= X.shape
 
@@ -549,14 +600,16 @@ class QDA:
         d_nu_0= sum/m
 
         #d R(nu)/d nu_1|d=  1/m sum_{x,y} [y==d](x + 1/2 nu_2|d^-1 \nu_1|d
-        d_nu_1= self._multiply_W_and_X_and_average(dif,X)
+
+        d_nu_1= np.einsum('ai,aj->ij', dif, X)/m
         for c in np.arange(self.cardY):
             d_nu_1[c]+= 0.5* sum[c] * np.matmul(nu_2_inv[c], nu_1[c])/m
 
 
         #d R(nu)/d nu_2|d= 1/m sum_{x,y} (h(d|x) - [d==y])(x·x^t - 1/4 · nu_2|d^-1 · nu_1,d · nu_1|d^t · nu_2|d^-1 + 1/2 tr(nu_2|d^-1)
-        d_nu_2= self._multiply_W_and_X2_and_average(dif,X)
+        d_nu_2= np.zeros((self.cardY, self.n, self.n))
         for c in np.arange(self.cardY):
+            d_nu_2[c]= np.einsum('a,ai,aj->ij', dif[:,c], X, X)/m
             d_nu_2[c]+= -0.25 * sum[c] * np.dot(np.dot(nu_2_inv[c], np.outer(nu_1[c],nu_1[c])), nu_2_inv[c])/m
             d_nu_2[c]+= 0.5* sum[c] * np.trace(nu_2_inv[c])/m
 
@@ -576,7 +629,14 @@ class QDA:
 
             # Get the closes covarianze matrix using eignevalue decomposition
             #cov(y)= -1/2 nu_2(y)^-1
-            self.cov_y[c]= closest_non_singular_matrix(-0.5* np.linalg.inv(nu_2[c]), epsilon= epsilon)
+            self.cov_y[c]= -0.5* np.linalg.inv(nu_2[c])
+
+            if psd_cov:
+                if self.n< 50:
+                    self.cov_y[c] = closest_non_singular_matrix(self.cov_y[c], epsilon= epsilon)
+                else:
+                    np.fill_diagonal(self.cov_y[c], np.maximum(np.diagonal(self.cov_y[c]), epsilon))
+
 
 
 
