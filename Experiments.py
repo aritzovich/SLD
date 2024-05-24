@@ -308,7 +308,7 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
     res = []
     classif = "NB"
     algorithms= ["RD", "GD", "DFE"]
-    types= ["ML"]#,"MAP"]
+    types= ["ML", "MAP"]
     card= 5
     corrections= [0,2]
 
