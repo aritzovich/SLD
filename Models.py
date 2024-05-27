@@ -481,7 +481,10 @@ class QDA:
         pY= np.zeros((m,self.cardY))
         #aux_pY= np.zeros((m,self.cardY))
         for c in np.arange(self.cardY):
-            log_mvn= log_multivariate_gaussian(X= X, mean=self.mean_y[c,:], cov=self.cov_y[c,:,:])
+            try:
+                log_mvn= log_multivariate_gaussian(X= X, mean=self.mean_y[c,:], cov=self.cov_y[c,:,:])
+            except:
+                log_mvn = log_multivariate_gaussian(X=X, mean=self.mean_y[c, :], cov=self.cov_y[c, :, :])
             pY[:, c] = log_mvn + np.log(self.p_y[c])
             #mvn = multivariate_normal(mean=self.mean_y[c,:], cov=self.cov_y[c,:,:], allow_singular= True)
             #aux_pY[:,c]= mvn.pdf(X)*self.p_y[c]
@@ -504,19 +507,26 @@ class QDA:
         self.s1_y -= lr * d_s1_y
         self.s2_y -= lr * d_s2_y
 
-        '''
-        if correct_forbidden_stats:
-            if np.any(self.m_y < 0):
-                self.m_y -= lr * d_m_y
 
-            #deberia hacerse para todos los valores de la clase o para ninguno: concatenar las features y despues dorregir todos los condicionadaos de el conjunto de features
+        if correct_forbidden_stats:
+            # If any statistic is not valid undo the changes
+            # class marginal
+
+            if np.any(self.m_y < 10**-3):
+                self.m_y += lr * d_m_y
+            # class condicional covariance
+            epsilon = 10 ** -2
+            #epsilon = 10 ** -1
             for y in range(self.cardY):
-                feats= np.where((np.diag(self.s2_y[y,:,:]- self.s1_y[y,:])**2/self.m_y[y])<= 0)[0]
-                if len(feats)>0:
-                    None
-                self.s2_y[y,:,:][np.ix_(feats,feats)]+= lr * d_s2_y[y,:,:][np.ix_(feats,feats)]
-                self.s1_y[y][feats]+= lr * d_s1_y[y][feats]
-        '''
+                var= np.diag(self.s2_y[y])/self.m_y[y] - (self.s1_y[y]/self.m_y[y])**2
+                #if (np.prod(var) < epsilon) | np.any(var < 0):
+                if np.any(var<epsilon):
+                    self.s2_y[y]+= lr * d_s2_y[y]
+                    var = np.diag(self.s2_y[y]) / self.m_y[y] - (self.s1_y[y] / self.m_y[y]) ** 2
+                    if np.any(var < epsilon):
+                    #if (np.prod(var) < epsilon) | np.any(var < 0):
+                        self.s1_y[y] += lr * d_s1_y[y]
+
 
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)
@@ -658,12 +668,12 @@ class QDA:
             #mu(y)= -1/2 nu_2(y)^-1 nu_1(y)
             self.mean_y[c]= -0.5* np.linalg.inv(nu_2[c]).dot(nu_1[c])
 
-            # Get the closes covarianze matrix using eignevalue decomposition
             #cov(y)= -1/2 nu_2(y)^-1
             self.cov_y[c]= -0.5* np.linalg.inv(nu_2[c])
 
             if psd_cov:
                 if self.n< 50:
+                    # Get the closes covarianze matrix using eignevalue decomposition
                     self.cov_y[c] = closest_non_singular_matrix(self.cov_y[c], epsilon= epsilon)
                 else:
                     np.fill_diagonal(self.cov_y[c], np.maximum(np.diagonal(self.cov_y[c]), epsilon))

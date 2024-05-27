@@ -23,10 +23,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-dataNames = ['glass', 'optdigits' , 'splice',  'QSAR', 'letterrecog', 'vehicle', 'satellite', 'sonar','adult',
-             'redwine','svmguide3', 'ecoli', 'german_numer', 'haberman', 'heart', 'indian_liver', 'iris',
-             'liver_disorder', 'mammographic', "blood_transfusion", "climate_model", "diabetes", "ionosphere",
-             'magic', 'pulsar']#, 'glass' falla log reg]#, 'thyroid']
+dataNames = ['QSAR', 'adult', "climate_model", "diabetes", 'ecoli', 'german_numer', 'glass', 'haberman', 'heart',
+             'indian_liver', "ionosphere", 'iris', 'letterrecog', 'liver_disorder', 'magic', 'mammographic', 'optdigits',
+             'pulsar', 'redwine', 'satellite', 'sonar', 'splice', 'svmguide3', 'vehicle']#, 'glass' falla log reg]#, 'thyroid'#QDA casca desde el principio"blood_transfusion",]
+#dataNames = ['redwine','indian_liver']
 
 #dataNames= ['liver_disorder']
 
@@ -165,9 +165,9 @@ def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0, uniform= False
     df.to_csv(file, index=False)  # Set index=False if you don't want to save the index
     print(f"Results saved")
 
-def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
+def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
     '''
-    logistic regression using gradient descent (GD) VS using ERD
+    Quadratic Discriminant Analysis (QDA) using gradient descent (GD) VS using risk-based calibration (RC)
 
     Models:
     - GD + standard initialization (parameters=0)
@@ -183,9 +183,8 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
     #dataNames = ['forestcov']
     res = []
     classif = "QDA"
-    algorithms= ["RD","GD"]
-    types= ["ML", "MAP"]
-
+    algorithms= ["RD"]#,"GD"]
+    types= ["ML"]#, "MAP"]
 
     for dataName in dataNames:
         X, Y = eval("utl.load_" + dataName + '(return_X_y=True)')
@@ -243,10 +242,11 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0):
                             prevError= actError
                             if algorithm== "RD":
                                 if type== 'ML':
-                                    h.riskDesc(X,Y,lr)
+                                    h.riskDesc(X,Y,lr,correct_forbidden_stats= correct_stats)
                                 else:
                                     #h.riskDesc(X,Y,lr,ess= cardY, mean0= 0, w_mean0=cardY, cov0= 1, w_cov0= cardY)
-                                    h.riskDesc(X,Y,lr,ess= prior[0], mean0= 0, w_mean0=prior[1], cov0= 1, w_cov0= prior[2])
+                                    h.riskDesc(X,Y,lr,ess= prior[0], mean0= 0, w_mean0=prior[1], cov0= 1, w_cov0= prior[2],
+                                               correct_forbidden_stats= correct_stats)
                             elif algorithm== "GD":
                                 h.gradDesc(X,Y,lr)
 
@@ -514,8 +514,8 @@ def experiments_RF(lr= 0.1, numIter=16, seed= 0):
 
 
 if __name__ == '__main__':
-    #experiments_QDA(numIter= 64,lr= 0.1)
-    experiments_NB(numIter=64)
+    experiments_QDA(numIter= 64,lr= 0.1, correct_stats=True)
+    #experiments_NB(numIter=64)
     #experiments_logisticRegression(numIter=64)
 
     #experiments_RF(numIter= 4)
