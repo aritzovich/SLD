@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import sklearn.svm
 
-from Models import LinearClassifier, NaiveBayesDisc, QDA, project_onto_simplex
+from Models import NaiveBayesDisc, QDA, project_onto_simplex
 from LogReg import LogReg
 from LogRegOld import LogRegOld
 from Utils import preprocess_data
@@ -26,9 +26,7 @@ warnings.filterwarnings("ignore")
 dataNames = ['QSAR', 'adult', "climate_model", "diabetes", 'ecoli', 'german_numer', 'glass', 'haberman', 'heart',
              'indian_liver', "ionosphere", 'iris', 'letterrecog', 'liver_disorder', 'magic', 'mammographic', 'optdigits',
              'pulsar', 'redwine', 'satellite', 'sonar', 'splice', 'svmguide3', 'vehicle']#, 'glass' falla log reg]#, 'thyroid'#QDA casca desde el principio"blood_transfusion",]
-#dataNames = ['redwine','indian_liver']
-
-#dataNames= ['liver_disorder']
+dataNames = ['redwine','indian_liver','liver_disorder']
 
 def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0, uniform= False):
     '''
@@ -50,7 +48,7 @@ def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0, uniform= False
     res = []
     classif = "LR"
     algorithms= ["RD", "GD"]
-    types= ["ML", "MAP"]
+    types= ["ML"]
 
     for dataName in dataNames:
         print(dataName)
@@ -165,7 +163,7 @@ def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0, uniform= False
     df.to_csv(file, index=False)  # Set index=False if you don't want to save the index
     print(f"Results saved")
 
-def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
+def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= True):
     '''
     Quadratic Discriminant Analysis (QDA) using gradient descent (GD) VS using risk-based calibration (RC)
 
@@ -174,6 +172,7 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
     - GD + parametric initialization
     - ERD (implicit parametric initialization)
 
+    :param lr: learning rate for gradient descent
     :param numIter: numero of iterations for the iterative algorithms
     :return:
     '''
@@ -183,15 +182,15 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
     #dataNames = ['forestcov']
     res = []
     classif = "QDA"
-    algorithms= ["RD"]#,"GD"]
-    types= ["ML"]#, "MAP"]
+    algorithms= ["RD","GD"]
+    types= ["ML", "MAP"]
 
     for dataName in dataNames:
         X, Y = eval("utl.load_" + dataName + '(return_X_y=True)')
         X, Y= preprocess_data(X, Y)
         cardY = np.unique(Y).shape[0]
         m, n = X.shape
-        priors = [(cardY, 1, 1)]
+        priors = [(cardY, 10, 10)]
 
         print(dataName)
         print("########")
@@ -217,7 +216,6 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
                             h.fit(X,Y)
                             prior= None
                         elif type == 'MAP':
-                            #h.fit(X,Y,ess= cardY, mean0= 0, w_mean0=cardY, cov0= 1, w_cov0= cardY)
                             h.fit(X,Y,ess= prior[0], mean0= 0, w_mean0=prior[1], cov0= 1, w_cov0= prior[2])
 
                         pY= h.getClassProbs(X)
@@ -253,6 +251,7 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
                             pY = h.getClassProbs(X)
                             if not np.isclose(np.sum(np.sum(pY, axis= 1))/m, 1, atol=10**-6):
                                 print(f"The class probabilities does not sum one: {np.sum(np.sum(pY, axis= 1))/m}")
+                                h.getClassProbs(X)
 
                             actError=  np.average(Y != np.argmax(pY, axis=1))
                             if actError< minError:
@@ -264,9 +263,6 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
                             res.append([dataName, m, n, classif, algorithm, type, iter, 's0-1', np.average(1- pY[np.arange(m), Y])])
                         print(f"{iter}\t {actError}\t from {iniError} to {minError} at {minIter}")
 
-                        if type== "ML":
-                            break
-
                     except Exception as e:
                         # Handling the exception by printing its description
                         print(f"Exception {e} in data {dataName}")
@@ -277,6 +273,11 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= False):
                                         np.average(- np.log(pY[np.arange(m), Y]))])
                             res.append([dataName, m, n, classif, algorithm, type, rest_iter, 's0-1',
                                         np.average(1 - pY[np.arange(m), Y])])
+                        print(f"{iter}\t {actError}\t from {iniError} to {minError} at {minIter}")
+
+                if type == 'ML':
+                    # There is no prior
+                    break
 
     file= f"./Results/results_exper_QDA_lr{lr}.csv"
     if os.path.exists(file):
@@ -407,117 +408,8 @@ def experiments_NB(lr= 0.1, numIter=128, seed= 0):
     print(f"Results saved")
 
 
-from sklearn import svm
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import AdaBoostClassifier
-def one_hot_encoding(Y, r):
-    m = len(Y)
-    one_hot_vector = np.zeros(m * r, dtype=float)  # Initialize one-hot encoding vector
-    indices = np.arange(m)  + Y*m
-    one_hot_vector[indices] = 1.0
-    return one_hot_vector
-
-def experiments_RF(lr= 0.1, numIter=16, seed= 0):
-    '''
-    logistic regression using gradient descent (GD) VS using ERD
-
-    Models:
-    - GD + standard initialization (parameters=0)
-    - GD + parametric initialization
-    - ERD (implicit parametric initialization)
-
-    :param dataNames: data sets
-    :param numIter: numero of iterations for the iterative algorithms
-    :param num_rep: number of repetitions of the experiment to account for the variability of the results
-    :return:
-    '''
-    np.random.seed(seed)
-
-
-    res = []
-    classif = "RF"
-    max_inst= 300
-
-
-    for dataName in dataNames:
-        X, Y = eval("utl.load_" + dataName + '(return_X_y=True)')
-        X, Y= preprocess_data(X, Y)
-        m, n = X.shape
-        cardY = np.unique(Y).shape[0]
-
-        if m< 500:
-
-            print(dataName)
-            print("########")
-            print("(m,n)=" + str((m, n)))
-            print("card Y= " + str(cardY))
-            print("proportions: " + str(np.unique(Y, return_counts=True)[1]))
-            # Set printing options
-            np.set_printoptions(precision=2, suppress=True)
-            print("mean")
-            print(np.average(X, axis=0))
-            np.set_printoptions(precision=2, suppress=True)
-            print("var")
-            print(np.var(X, axis=0))
-
-            try:
-                iter= 1
-
-                h= RandomForestClassifier(n_estimators=7)
-                #h= DecisionTreeClassifier()
-                h.fit(X,Y)
-                pY= h.predict_proba(X)
-
-                prevError = np.inf
-                actError = np.average(Y != np.argmax(pY, axis=1))
-                initError = actError
-                minError = actError
-                minIter = 1
-
-                X_extended= np.tile(X, (cardY, 1))
-                Y_extended= np.repeat(np.arange(cardY),m)
-                W0= one_hot_encoding(Y,  cardY)
-                W=  one_hot_encoding(Y,  cardY)
-
-                print(f"SVM")
-                print(f"iter actError     (prevError-actError)  improve")
-                while iter < numIter:
-                    if int(np.log2(iter)) < int(np.log2(iter + 1)):
-                        print(f"{iter}\t{actError}\t{prevError > actError}")
-                    iter +=1
-                    prevError= actError
-
-                    # ERD
-                    W+= lr*(W0 - pY.transpose().flatten())
-
-                    h.fit(X_extended,Y_extended,sample_weight=W)
-                    pY = h.predict_proba(X)
-
-                    if np.any(pY<0):
-                        pY = np.apply_along_axis(project_onto_simplex, axis=1, arr=pY)
-
-                    if np.any(pY<0) or np.any(np.sum(pY,axis= 1)!=1):
-                        #print(f"{pY[np.where(np.sum(pY,axis= 1)!=1),:]}")
-                        print(f"{np.sum(pY[np.where(np.sum(pY,axis= 1)!=1),:][0], axis= 1)}")
-
-                    actError = np.average(Y != np.argmax(pY, axis=1))
-                    if minError > actError:
-                        minError = actError
-                        minIter = iter
-
-                print(f"{iter}\t {actError} from {initError} min {minError} at iter {minIter}")
-
-            except Exception as e:
-                # Handling the exception by printing its description
-                print(f"Exception in data {dataName} with RF at iter {iter}:\n {e}")
-
-
 if __name__ == '__main__':
-    experiments_QDA(numIter= 64,lr= 0.1, correct_stats=True)
-    #experiments_NB(numIter=64)
-    #experiments_logisticRegression(numIter=64)
-
-    #experiments_RF(numIter= 4)
-    #experiments_logisticRegression()
+    experiments_QDA(numIter= 64)
+#    experiments_NB(numIter=64)
+#    experiments_logisticRegression(numIter=64)
 

@@ -91,77 +91,42 @@ def log_multivariate_gaussian(X, mean, cov):
 
     # Compute the log-pdf for each instance
     log_pdf = -0.5 * (log_det_cov + mahalanobis + len(mean) * np.log(2 * np.pi))
-
     return log_pdf
 
-
-class LinearClassifier:
-    def __init__(self, num_features, num_classes):
-        self.num_classes = num_classes
-        self.num_features = num_features
-        self.weights = np.zeros((num_features, num_classes))
-
-    def fit(self, X_train, y_train):
-        '''
-        Fitting by minimum squares
-        :param X_train:
-        :param y_train:
-        :return:
-        '''
-        # Add bias term to features
-        X_train_bias = np.hstack((X_train, np.ones((X_train.shape[0], 1))))
-
-        if y_train.ndim==1:
-            # One-hot encoding of labels
-            y_train_one_hot = np.eye(self.num_classes)[y_train]
-
-
-        # Solve least squares problem
-        self.weights = np.linalg.lstsq(X_train_bias, y_train_one_hot, rcond=None)[0]
-
-    def riskDesc(self,X_train, y_train, lr= 0.1):
-
-        diff= self.getClassProbs(X_train) - np.eye(self.num_classes)[y_train]
-        X_train_bias = np.hstack((X_train, np.ones((X_train.shape[0], 1))))
-        d_weights = np.linalg.lstsq(X_train_bias, diff, rcond=None)[0]
-
-        self.weights-= lr * d_weights
-
-
-    def getClassProbs(self, X):
-        # Add bias term to features
-        X_bias = np.hstack((X, np.ones((X.shape[0], 1))))
-
-        # Predict probabilities for each class
-        logits = np.dot(X_bias, self.weights)
-        probabilities = np.exp(logits) / np.sum(np.exp(logits), axis=1, keepdims=True)
-
-        return probabilities
-
-    def predict(self,X):
-        # Predict class with highest probability
-        return np.argmax(self.getClassProbs(X), axis=1)
-
-
 class NaiveBayesDisc:
+    '''
+    Naive Bayes classifiers for categorical input features (NB)
+    '''
     def __init__(self, cardY, card, n):
+        '''
+        Constructor for NB
+
+        Args:
+            cardY: cardinality of the class variable
+            card: cardinality of the discrete input features
+            n: number of features
+        '''
         self.cardY = cardY
         self.num_features = n
         self.card= card
         self.class_counts = np.zeros(cardY)
-        #self.feature_counts = np.zeros((n, 2, cardY))
         self.feature_counts = np.zeros((n, card, cardY))
         self.class_probs = np.zeros(cardY)
-        #self.cond_probs = np.zeros((n, 2, cardY))
         self.cond_probs = np.zeros((n, card, cardY))
 
     def getStats(self, X, Y):
+        '''
+        The statistics mapping for NB
+        Args:
+            X: training unlabeled instances
+            Y: training class labels
+
+        Returns:
+            The statistics obtained from training data for NB: counting statistics
+        '''
         m,n= X.shape
         class_counts = np.zeros(self.cardY)
         feature_counts = np.zeros((n, self.card, self.cardY))
-
-        # Convert X to a boolean mask
-        # X_mask = X.astype(bool)
 
         if Y.ndim == 1:
             # Compute class counts
@@ -171,38 +136,31 @@ class NaiveBayesDisc:
             for j in range(self.num_features):
                 feature_counts[j, :, :]= np.bincount(X[:,j]*self.cardY+ Y, minlength= self.card* self.cardY ).reshape((self.card,self.cardY))
 
-                #feature_counts[j, :, :]= np.bincount(X[:,j]*self.cardY+ Y, minlength= 2* self.cardY ).reshape((2,self.cardY))
-                #feature_counts[j, 0, :] += np.bincount(Y[~X_mask[:,j]], minlength=self.cardY)
-                #feature_counts[j, 1, :] += np.bincount(Y[X_mask[:,j]], minlength=self.cardY)
-
         else:
             # Compute class counts
             class_counts += np.sum(Y,axis= 0)
 
-            # Use broadcasting to update feature_counts efficiently
+            # Compute input feature counts
             for j in range(self.num_features):
                 for x in range(self.card):
                     feature_counts[j, x, :] = np.sum(Y[X[:, j]==x,:], axis= 0)
 
-                #feature_counts[j, 1, :]= X[:,j].dot(Y)
-                #feature_counts[j, 0, :]= (1-X[:,j]).dot(Y)
-                #feature_counts[j, 0, :] += np.sum(Y[~X_mask[:,j], :], axis=0)
-                #feature_counts[j, 1, :] += np.sum(Y[X_mask[:,j], :], axis=0)
 
         return class_counts, feature_counts
 
     def statsToParams(self, ess= 0):
         '''
-        Parameter mapping: from statistics to parameters.
+        Parameter mapping for NB that gets and stores the parameters from the statistics.
+
+        The statistics are obtained from the attributes: class_counts and feature_counts-
 
         Args:
             ess: when zero corresponds to maximum likelihood parameters. When positive corresponds to maximum a
             posteriori parameters with a uniform dirichlet prior with ess equivalent sample size
-        Returns:
-
         '''
+
         if ess>0:
-            #feature_counts_prior = np.ones((self.num_features, 2, self.cardY)) * ess / (2 * self.cardY)
+            # Priors for the maximum a posteriori estimates
             feature_counts_prior = np.ones((self.num_features, self.card, self.cardY)) * ess / (self.card * self.cardY)
             class_counts_prior = np.ones(self.cardY) * ess / self.cardY
 
@@ -214,7 +172,6 @@ class NaiveBayesDisc:
 
         # Compute conditional probabilities
         for j in range(self.num_features):
-            #for f in range(2):
             for f in range(self.card):
                 for c in range(self.cardY):
                     if ess== 0:
@@ -223,23 +180,33 @@ class NaiveBayesDisc:
                         self.cond_probs[j, f, c] = (self.feature_counts[j, f, c] + feature_counts_prior[j, f, c]) / (
                                     self.class_counts[c] + class_counts_prior[c])
 
-    def fit(self, X_train, y_train, ess= 0):
-        self.class_counts,self.feature_counts= self.getStats(X_train, y_train)
+    def fit(self, X, Y, ess= 0):
+        '''
+        The closed-form learning algorithm for NB.
+
+        When ess=0 learn the maximum likelihood parameters. When ess>0 learn the maximum a posteriori parameters
+        with a Dirichlet prior distribution with uniform hyperparameters and an equivalent sample size of ess
+
+        Args:
+            X: training unlabeled instances
+            Y: training class labels
+            ess: equivalent sample size of the Dirichlet prior
+
+        '''
+        self.class_counts,self.feature_counts= self.getStats(X, Y)
         self.statsToParams(ess)
 
     def riskDesc(self, X, Y, lr= 0.1, ess= 0, correct_forbidden_stats= True):
         '''
-        Risk descent iterative learning algorithm.
+        Risk-based calibration learning algorithm for NB. It is based on the maximum likelihood/maximum a posteriori
+        closed form learning algorithm ess=0/ess>0
 
         Args:
-            X: Training unlabeled instances
-            Y: Training class labels
+            X: training unlabeled instances
+            Y: training class labels
             lr: learning rate
-            correct_negative_stats:
-                1) project negative statistics by using the simplex projection of the associated probabilities
-                2) do not update the table with negative statistics
-
-        Returns:
+            ess: equivalent sample size of the Dirichlet prior
+            correct_forbidden_stats: when true (default) it does not update the statistics with negative statistics
 
         '''
 
@@ -263,17 +230,15 @@ class NaiveBayesDisc:
             for j,y in indices:
                 self.feature_counts[j, :, y] += lr * d_feature_counts[j, :, y]
 
-
-
         # update the parameters from the parameters
         self.statsToParams(ess)
 
 
     def gradDesc(self, X, Y, lr= 0.1, opt_normalization= 0):
         '''
-        Gradient descent for the discrete naive Bayes classifiers. The gradient is computed for the parameters
-        (probabilities) in their logarithm form to avoid negative parameters. Once the gradient descent is computed
-        the parameters are projected into the simplex to guarantee that are probabilities
+        Gradient descent of the average negative log loss in training data for NB. The gradient is computed for the
+        parameters (probabilities) in their logarithm form to avoid negative probabilities. Once the gradient descent
+        is computed the parameters are projected into the simplex to guarantee that represent probabilities
 
         :param X: unlabeled instances
         :param Y: labels
@@ -481,10 +446,9 @@ class QDA:
         pY= np.zeros((m,self.cardY))
         #aux_pY= np.zeros((m,self.cardY))
         for c in np.arange(self.cardY):
-            try:
-                log_mvn= log_multivariate_gaussian(X= X, mean=self.mean_y[c,:], cov=self.cov_y[c,:,:])
-            except:
-                log_mvn = log_multivariate_gaussian(X=X, mean=self.mean_y[c, :], cov=self.cov_y[c, :, :])
+            log_mvn= log_multivariate_gaussian(X= X, mean=self.mean_y[c,:], cov=self.cov_y[c,:,:])
+            # avoid infinity
+            log_mvn[np.where(np.isinf(log_mvn))] = -10 ** 12
             pY[:, c] = log_mvn + np.log(self.p_y[c])
             #mvn = multivariate_normal(mean=self.mean_y[c,:], cov=self.cov_y[c,:,:], allow_singular= True)
             #aux_pY[:,c]= mvn.pdf(X)*self.p_y[c]
@@ -510,98 +474,28 @@ class QDA:
 
         if correct_forbidden_stats:
             # If any statistic is not valid undo the changes
-            # class marginal
 
+            # class marginal
             if np.any(self.m_y < 10**-3):
                 self.m_y += lr * d_m_y
-            # class condicional covariance
-            epsilon = 10 ** -2
-            #epsilon = 10 ** -1
-            for y in range(self.cardY):
-                var= np.diag(self.s2_y[y])/self.m_y[y] - (self.s1_y[y]/self.m_y[y])**2
-                #if (np.prod(var) < epsilon) | np.any(var < 0):
-                if np.any(var<epsilon):
-                    self.s2_y[y]+= lr * d_s2_y[y]
-                    var = np.diag(self.s2_y[y]) / self.m_y[y] - (self.s1_y[y] / self.m_y[y]) ** 2
-                    if np.any(var < epsilon):
-                    #if (np.prod(var) < epsilon) | np.any(var < 0):
-                        self.s1_y[y] += lr * d_s1_y[y]
+            # class conditional covariance
 
+            epsilon = 10 ** -6
+            for y in range(self.cardY):
+                if np.any(np.diag(self.s2_y[y]) <= 0):
+                    self.s1_y += lr * d_s1_y
+                    self.s2_y += lr * d_s2_y
+                '''
+                var= np.diag(self.s2_y[y])/self.m_y[y] - (self.s1_y[y]/self.m_y[y])**2
+                lowest= np.argsort(var)[:np.min([15,self.n])]
+                cov= self.s2_y[y][np.ix_(lowest,lowest)]/self.m_y[y] - np.outer(self.s1_y[y][lowest],self.s1_y[y][lowest])/self.m_y[y]**2
+                if (np.linalg.det(cov) < epsilon) or np.any(var < 0):
+                    self.s2_y[y]+= lr * d_s2_y[y]
+                    self.s1_y[y]+= lr * d_s1_y[y]
+                '''
 
         # update the parameters
         self.statsToParams(ess, mean0, w_mean0, cov0, w_cov0)
-
-    def _multiply_W_and_X2_and_average_oldest(self,W,X, batch_size= 50000):
-
-        m,n= X.shape
-        A = np.zeros((self.cardY, n, n))
-        for i in range(int(1 + m / batch_size)):
-            # Reshape X to (m, n, 1) and X transposed to (m, 1, n) for broadcasting
-            X_reshaped = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis]
-            X_transposed_reshaped = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), np.newaxis, :]
-            # Perform element-wise multiplication
-            M = X_reshaped * X_transposed_reshaped
-            # Reshape W to (m, 1, n, n) for broadcasting
-            M_reshaped = M[:, np.newaxis, :, :]
-            # Reshape W to (m, r, 1, 1) for broadcasting
-            W_reshaped = W[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis, np.newaxis]
-
-            # Perform element-wise multiplication
-            A += np.sum(M_reshaped * W_reshaped, axis=0)
-        return A/m
-
-    def _multiply_W_and_X2_and_average_old(self, W, X):
-        """
-        Compute R of size (r, n, n) where R[i, j, k] = sum_a W[a, i] * X[a, j] * X[a, k]
-
-        Parameters:
-        W (np.ndarray): Input matrix of size (m, r)
-        X (np.ndarray): Input matrix of size (m, n)
-
-        Returns:
-        np.ndarray: Resultant matrix R of size (r, n, n)
-        """
-        m,n= X.shape
-        # Compute the element-wise product of X with itself along the new axes
-        XX = np.einsum('aj,ak->ajk', X, X)  # XX has shape (m, n, n)
-
-        # Compute the tensordot product of W with XX along the first axis of W and XX
-        R = np.tensordot(W, XX, axes=(0, 0))/m  # R has shape (r, n, n)
-
-        return R
-
-    def _multiply_W_and_X2_and_average(self, W, X, batch_size=10000):
-        """
-        Compute R of size (r, n, n) where R[i, j, k] = sum_a W[a, i] * X[a, j] * X[a, k]
-
-        Parameters:
-        W (np.ndarray): Input matrix of size (m, r)
-        X (np.ndarray): Input matrix of size (m, n)
-
-        Returns:
-        np.ndarray: Resultant matrix R of size (r, n, n)
-        """
-        m,n= X.shape
-        R = np.zeros((self.cardY, self.n, self.n))
-        for ind in range(int(1 + m / batch_size)):
-            R+= np.einsum('ai,aj,ak->ijk', W[(ind * batch_size):np.min([(ind + 1) * batch_size, m]),:],
-                         X[(ind * batch_size):np.min([(ind + 1) * batch_size, m]),:],
-                         X[(ind * batch_size):np.min([(ind + 1) * batch_size, m]),:])  # R has shape (r, n, n)
-
-        return R/m
-
-    def _multiply_W_and_X_and_average(self, W, X, batch_size=50000):
-
-        m,n= X.shape
-        A = np.zeros((self.cardY, n))
-        for i in range(int(1 + m / batch_size)):
-            # Reshape Y to have the same shape as X
-            W_reshaped = W[(i * batch_size):np.min([(i + 1) * batch_size, m]), :, np.newaxis]
-            # Perform element-wise multiplication
-            M = X[(i * batch_size):np.min([(i + 1) * batch_size, m]), np.newaxis, :] * W_reshaped
-            A+= np.sum(M, axis= 0)
-
-        return A/m
 
     def gradDesc(self, X, Y, lr= 0.1, psd_cov= True):
 

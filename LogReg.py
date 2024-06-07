@@ -19,6 +19,21 @@ class LogReg:
         self.canonical= canonical
 
     def fit(self, X, Y, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
+        '''
+        Closed-form learning algorithm for LR
+
+        Args:
+            X: training unlabeled instances
+            Y: training class labels
+            ess:
+            mean0:
+            w_mean0:
+            cov0:
+            w_cov0:
+
+        Returns:
+
+        '''
         self.m, self.my, self.sy, self.s2y= self.getStats(X,Y)
         self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
 
@@ -27,8 +42,8 @@ class LogReg:
         Compute the exponents that determine the class probabilities
         h(y|x) propto np.exp(self.exponent(x)[y])
 
-        :param X: the array of unlabeled instances
-        :return:
+        :param X: unlabeled instances
+        :return: the logarithm of the class probabilities for each unlabeled instance, log h(y|x)
         '''
         if self.canonical:
             return self.alpha_y + X.dot(self.beta_y.transpose()) - self.A()
@@ -40,14 +55,12 @@ class LogReg:
         The log partition function for the logistic regression in the canonical form of the exponential
         family (self.canonical=True) under the equivalence with Gaussian naive Bayes with homocedasticity assumption
 
-        Note that the terms independent from y are canceled in the softmax
+        Note that the terms independent from the class label are canceled in the softmax
 
         -See https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions normal distribution
         -The parameters self.kappa (one for ech predictor) correspond to -1/sigma^2.
         :return:
         '''
-        # TODO: exponential_family#table_of_distributions has an error en the log partition function using natural params
-        #A= -np.sum(self.beta_y**2/(4 * self.kappa), axis=1)# - np.sum(1/2 * np.log(-2 * self.kappa)) <- in wikipedia
         A = -np.sum(self.beta_y ** 2 / (2 * self.kappa), axis=1)  # - np.sum(1/2 * np.log(-2 * self.kappa))
         return A
 
@@ -62,45 +75,15 @@ class LogReg:
             return softmax(self.exponent(X), axis=1)
         else:
             return softmax(self.exponent(X))
-    def getNbProbs(self,X):
-        '''
-        The class conditional distribution for the Gaussian naive Bayes under homocedasticity. The probabilities
-        are obtained by evaluating the conditional Gaussian distribution p(x,y) = p(y) prod_i p(x_i|y) and then
-        p(y|x) is obtained using Bayes rule
 
-        It is used to check the equivalence with logistic regression clasification rule
-        TODO: Remove it when everything works
-
-        :param X: Unlabeled instances
-        :return: p(Y|X)
-        '''
-
-        m,n= X.shape
-        pY= np.zeros((m,self.cardY))
-        for y in range(self.cardY):
-            try:
-                pY[:,y]= multivariate_normal.pdf(X, mean=self.mu_y[y], cov= self.v)* self.py[y]
-            except:
-                pY[:, y] = multivariate_normal.pdf(X, mean=self.mu_y[y], cov=self.v) * self.py[y]
-        #Apply the Bayes rule to p(y,x) to obtain p(y|x) for each x in X (normalize)
-        pY/= np.repeat(np.sum(pY,axis=1), self.cardY).reshape((m, self.cardY))
-
-        return pY
     def predict(self,X):
         '''
-        return the class labels with maximum probability for the given unlableled instances
+        return the class labels with maximum probability for the given unlabeled instances
+
         :param X: unlabeled instances
         :return: an array with the labels with maximum probability
         '''
         return np.argmax(self.getClassProbs(X), axis=1)
-
-    def copy(self):
-        '''
-        Returns a copy of the current classifier
-
-        TODO:To be implemented
-        '''
-        None
 
     def initialization(self):
         '''
@@ -112,33 +95,29 @@ class LogReg:
         self.beta_y= np.zeros((self.cardY,self.n))
         self.alpha_y= np.zeros(self.cardY)
 
-    def minimumSquare(self,X,y, esz= 1.0):
-        '''
-        The parametric initialization for the logistic regression
-        :param X:
-        :param Y:
-        :param esz:
-        :return:
-        '''
-        # Add bias term to features
-        X_bias = np.hstack((X, np.ones((X.shape[0], 1))))
-
-        y_oh = np.eye(self.cardY)[y]
-
-
-        # Solve least squares problem
-        w = np.linalg.lstsq(X_bias, y_oh, rcond=None)[0]
-        self.alpha_y= w[-1,:]
-        self.beta_y= w[:-1,:].transpose()
-
-
-
     def statsToParams(self, m, my, sy, s2y, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0):
         '''
-        Compute the parameters of the classifier given the input statistics (CondMoments)
+        Parameter mapping for the LR given the input statistics stored at attributes. Depending on the values of
+        ess, w_mean0, w_cov0 maximum likelihood (values = 0) or maximum a posteriori (values > 0) parameters are
+        computed
+
+        Args:
+            m: number of instances
+            my: number of instances of class y
+            sy: sum of x for the instances of class y
+            s2y: sum of x^2 for the instances of class y
+            ess: equivalent sample size of the Dirichlet uniform prior for the class marginal distribucion
+            mean0: the prior mean vector for the normal-Whisart prior
+            w_mean0: equivalent sample size for the Normal-Whisart prior of the mean vector conditioned to ech class
+            label
+            cov0: the variance prior for the normal-Whisart prior
+            w_cov0: equivalent sample size for the Normal-Whisart prior of the variance
+
+        Returns:
+
         '''
 
-        # Parameters for Gaussian nb under homocedasticity
+        # Parameters for Gaussian naive Bayes under homocedasticity
         if ess== 0:
             self.py = my / m
         else:
@@ -151,16 +130,6 @@ class LogReg:
             prior_mean= np.ones((self.cardY, self.n))*mean0
             self.mu_y = (sy +prior_mean* w_mean0) /(np.repeat(my, self.n).reshape(sy.shape)+ w_mean0)
 
-
-        # varianza
-        # self.v= np.sum(s2y,axis=0)/m - (np.sum(sy,axis=0)/m)**2
-
-        # Promediado de varianzas
-        # s2y= s2y/np.tile(my[:,np.newaxis],(1,self.n)) - (self.mu_y**2)* np.tile(self.py[:,np.newaxis],(1,self.n))
-        # self.v= self.py.transpose().dot(s2y)
-
-        # max likel estimate: (sum_i x^2 - sum_y m_y mu_y^2)/m = sum_i x^2/m - sum_y p(y) mu_y^2
-        # self.v= (np.sum(s2y,axis= 0) - np.sum(sy**2/np.tile(my[:,np.newaxis],(1,self.n)), axis= 0))/m
         if w_cov0==0:
             # s2/m - sum_y m_y/m * mu_y^2
             self.v=  np.sum(s2y,axis=0)/m - self.py.transpose().dot(self.mu_y**2)
@@ -172,28 +141,33 @@ class LogReg:
         self.standardToNatural()
 
     def standardToNatural(self):
-        # params without A
-        # dependent term x_i, beta_y_i= mu_y_i/sigma_i^2
-        # TODO duda: puede que sea mu_r-mu_Y/ sqrt(s2)
+        '''
+        Transform the parameters to the exponential form of the model
+
+        Depending on the form of the logistic regression (self.canonical) the log partition function (false) is included
+        into the parameters associated to the class marginal distribution.
+        '''
         self.beta_y= self.mu_y/self.v
-        # alfa_y= ln p(y)/p(r) + sum_i (mu_r^2-mu_y^2)/2sigma_i^2 and alpha_r= 0
         if self.canonical:
             self.alpha_y = np.log(self.py)
-            # Para poder calcular la log partition funcion A
+            # kappa is used to compute the log partition funcion, A
             self.kappa= -1/self.v
         else:
             # When logistic regression is not in the canonical form the log partition function is included
-            # in the parameters associated to the marginal of the class distribution, log(p(Y)). Note that the terms
-            # independent from y in the log partition funcion are canceled in the softmax
+            # in the parameters associated to the marginal of the class distribution, log(p(Y)). The terms
+            # independent from y in the log partition function are canceled
             self.alpha_y = np.log(self.py) - np.sum(self.mu_y**2/(2 * self.v),axis=1)
 
     def getStats(self,X,Y):
         '''
-        Return the statistics from the input training set
+        Statistics mapping of the training data for LR
 
-        X: unlabeled instances
-        Y: class labels. When Y is a matrix, Y is a probabilistic labeling
-        esz: equivalent sample size
+        Args:
+            X: training unlabeled instances
+            Y: training class labels
+
+        return: number of instances, number of instances for each class, sum of x for each input feature conditioned to
+        each class label, sum of x^2 for each input feature conditioned to each class label class
         '''
 
         if Y.ndim== 1:
@@ -214,13 +188,12 @@ class LogReg:
 
     def gradDesc(self, X, Y, lr= 0.1):
         '''
-        Gradient descent for the LogosticReg classifiers
-        :param X: unlabeled instances
-        :param Y: labels
-        :param pY: probabilistic labels
-        :param h: logisticReg classifier
-        :param lr: learning rate
-        :param canonical: the form of the LogisticReg classifier
+        Gradient descent of the average negative log loss in training data for LR
+
+        Args:
+            X: training unlabeled instances
+            Y: training class labels
+            lr: learning rate (default 0.1)
         :return:
         '''
 
@@ -248,11 +221,20 @@ class LogReg:
 
     def riskDesc(self, X, Y, lr= 0.1, ess= 0, mean0= 0, w_mean0=0, cov0= 1, w_cov0= 0, correct_forbidden_stats= True):
         '''
+        Risk-based calibration for LR. The closed from algorithm learn maximum likelihood (ess=0, w_mean0= 0,
+        w_cov0= 0) or the maximum a posteriori parameters (values grater than 0)
 
-        :param X: Instances
-        :param Y: Labels
-        :param lr: learning rate
-        :param stc: stochastic/deterministic 0-1 loss
+        args:
+            X: training unlabeled instances
+            Y: training class labels
+            lr: learning rate
+            ess: equivalent sample size of the Dirichlet uniform prior for the class marginal distribucion
+            mean0: the prior mean vector for the normal-Whisart prior
+            w_mean0: equivalent sample size for the Normal-Whisart prior of the mean vector conditioned to ech class
+            label
+            cov0: the variance prior for the normal-Whisart prior
+            w_cov0: equivalent sample size for the Normal-Whisart prior of the variance
+            correct_forbidden_stats: when true (default) it does not update the statistics with negative statistics
         '''
 
         m= X.shape[0]
@@ -270,22 +252,8 @@ class LogReg:
         self.s2y -= lr * d_s2y
 
         if correct_forbidden_stats:
-            '''
-            aux= lr
-            while np.any(self.my <= 0.001) or np.any(self.s2y <= 0.001):
-                self.m += aux * d_m
-                self.my += aux * d_my
-                self.sy += aux * d_sy
-                self.s2y += aux * d_s2y
-                aux*= 0.1
-                self.m -= aux * d_m
-                self.my -= aux * d_my
-                self.sy -= aux * d_sy
-                self.s2y -= aux * d_s2y
-            '''
-            if np.any(self.my <= 0.000):
+            if np.any(self.my <= 0):
                 self.my += lr * d_my
-                v= self.s2y - self.sy/self.my[:,np.newaxis]
 
         self.statsToParams(self.m, self.my, self.sy, self.s2y, ess, mean0, w_mean0, cov0, w_cov0)
 

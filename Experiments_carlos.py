@@ -25,23 +25,21 @@ dataNames = ['glass', 'optdigits' , 'splice',  'QSAR', 'letterrecog', 'vehicle',
 
 dataNames2 = ["mnist", "catsvsdogs", "cifar10", "fashion_mnist", "yearbook"]
 
-def experiment_embedded_data_LR(lr=0.1, numIter=256, seed=0):
+def experiment_embedded_data_LR(lr=0.1, numIter=256):
     """
     Experiment to analyze curves of convergence with the data based on ResNet18 embeddings for Logistic Regression
+    learned using gradient descent (GD) and risk-based calibration (RC) algorithms. GD is performed for the average
+    negative log loss in training and RC is performed using ML algorithm
     Args:
-        lr:
-        numIter:
-        seed:
+        lr: learning rate
+        numIter: number of iterations of
 
-    Returns:
-
+    Generates the plots of the evolution of the empirical error of GD and RC with respect to the iterations
     """
 
-    # np.random.seed(seed)
     algorithms = ["GD", "RD"]
-    types = ["ML", "MS"]
+    types = ["ML"]
     dataNames = ["mnist", "catsvsdogs", "cifar10", "fashion_mnist", "yearbook"]
-    #dataNames = ["catsvsdogs"]
     res = []
 
     cont_plot = 0
