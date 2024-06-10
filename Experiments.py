@@ -277,9 +277,9 @@ def experiments_QDA(lr= 0.1, numIter=128, seed= 0, correct_stats= True):
                                         np.average(1 - pY[np.arange(m), Y])])
                         print(f"{iter}\t {actError}\t from {iniError} to {minError} at {minIter}")
 
-                if type == 'ML':
-                    # There is no prior
-                    break
+                    if type == 'ML':
+                      # There is no prior
+                      break
 
     file= f"./Results/results_exper_QDA_lr{lr}.csv"
     if os.path.exists(file):
