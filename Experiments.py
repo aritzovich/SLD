@@ -27,8 +27,7 @@ dataNames = ['QSAR', 'adult', "climate_model", "diabetes", 'ecoli', 'german_nume
              'indian_liver', "ionosphere", 'iris', 'letterrecog', 'liver_disorder', 'magic', 'mammographic', 'optdigits',
              'pulsar', 'redwine', 'satellite', 'sonar', 'splice', 'svmguide3', 'vehicle', 'blood_transfusion',
              "mnist", "catsvsdogs", "cifar10", "fashion_mnist", "yearbook"]
-#, 'glass' falla log reg]#, 'thyroid'#QDA casca desde el principio"blood_transfusion",]
-#dataNames = ['redwine','indian_liver','liver_disorder']
+
 
 def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0, uniform= False):
     '''
@@ -74,7 +73,7 @@ def experiments_logisticRegression(lr= 0.1, numIter=128, seed= 0, uniform= False
         print("var")
         print(np.var(X, axis=0))
 
-        priors = [(cardY, 1, 1)]
+        priors = [(cardY, 10, 10)]
 
         for algorithm in algorithms:
             for type in types:
